@@ -4,6 +4,7 @@ require('dotenv').config();
 const fs = require('fs');
 const express = require('express');
 const session = require('express-session');
+const RateLimit = require('express-rate-limit');
 const RedisStore = require('connect-redis')(session);
 const path = require('path');
 const logger = require('morgan');
@@ -53,10 +54,13 @@ const registerWebhook = function(shopDomain, accessToken, webhook) {
 
 const app = express();
 const isDevelopment = NODE_ENV !== 'production';
+const accessLogStream = fs.createWriteStream(path.join(__dirname, 'access.log'), {flags: 'a'});
 
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
+app.use(logger('combined', {stream: accessLogStream}));
 app.use(logger('dev'));
+
 app.use(
   session({
     store: isDevelopment ? undefined : new RedisStore(),
@@ -65,6 +69,16 @@ app.use(
     saveUninitialized: false,
   })
 );
+
+app.enable('trust proxy'); 
+
+var apiLimiter = new RateLimit({
+  windowMs: 15*60*1000, 
+  max: 100,
+  delayMs: 0 
+});
+
+app.use('/ecommerce/', apiLimiter);
 
 // Run webpack hot reloading in dev
 if (isDevelopment) {
