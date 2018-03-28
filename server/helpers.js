@@ -59,9 +59,9 @@ function customerRecord(registration_data, domain){
       json: true
   };
     return options;
-  }
+}
 
- function MFG_Request(shopify_pricing){
+function MFG_Request(shopify_pricing){
 
     console.timeEnd("RECIEVE DATA");
     console.time("GET MFG PRICING");
@@ -74,6 +74,7 @@ function customerRecord(registration_data, domain){
         console.time("TRANSFORM PRICING");
 
         var raw = response;
+        console.log(shopify_pricing.options);
         var rawArray = raw.split('|');
         var increaseKey = 0;
         var increaseValue = 0;
@@ -113,6 +114,8 @@ function customerRecord(registration_data, domain){
           shopifyTagString += shopifyProduct + ":" + pricing + ", ";
 
         }
+
+        shopifyTagString += pricingObject[products][1].trim();
         var shopify_data = {
           "customer": {
             "id": shopify_pricing.shopify_request.ShopifyCustomerNumber,
@@ -120,7 +123,6 @@ function customerRecord(registration_data, domain){
             "domain": shopify_pricing.header,
           }
         };
-
         resolve(shopify_data);
 
       })
@@ -170,185 +172,106 @@ function shopifyPricingPut(shopify_data) {
     return promise;
  }
 
- var body = {  
-  "id":417742422059,
-  "email":"mason@spacelabs.com",
-  "closed_at":null,
-  "created_at":"2018-03-23T16:06:25-07:00",
-  "updated_at":"2018-03-23T16:06:26-07:00",
-  "number":37,
-  "note":null,
-  "token":"ae019049c231a92e2d71cba61f80afcf",
-  "gateway":"Cash on Delivery (COD)",
-  "test":false,
-  "total_price":"30.00",
-  "subtotal_price":"30.00",
-  "total_weight":0,
-  "total_tax":"0.00",
-  "taxes_included":false,
-  "currency":"USD",
-  "financial_status":"paid",
-  "confirmed":true,
-  "total_discounts":"0.00",
-  "total_line_items_price":"30.00",
-  "cart_token":null,
-  "buyer_accepts_marketing":false,
-  "name":"#SP1037",
-  "referring_site":null,
-  "landing_site":null,
-  "cancelled_at":null,
-  "cancel_reason":null,
-  "total_price_usd":"30.00",
-  "checkout_token":null,
-  "reference":null,
-  "user_id":17954373675,
-  "location_id":null,
-  "source_identifier":null,
-  "source_url":null,
-  "processed_at":"2018-03-23T16:06:25-07:00",
-  "device_id":null,
-  "phone":null,
-  "customer_locale":null,
-  "app_id":1354745,
-  "browser_ip":null,
-  "landing_site_ref":null,
-  "order_number":1037,
-  "discount_codes":[  
+function addDays(date, days) {
 
-  ],
-  "note_attributes":[  
+  var result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
 
-  ],
-  "payment_gateway_names":[  
-     "Cash on Delivery (COD)"
-  ],
-  "processing_method":"manual",
-  "checkout_id":null,
-  "source_name":"shopify_draft_order",
-  "fulfillment_status":null,
-  "tax_lines":[  
+}
 
-  ],
-  "tags":"",
-  "contact_email":"mason@spacelabs.com",
-  "order_status_url":"https:\/\/checkout.shopify.com\/27777236\/orders\/ae019049c231a92e2d71cba61f80afcf\/authenticate?key=39acefe40d58ac40c8c194feeeccb35b",
-  "line_items":[  
-     {  
-        "id":835113648171,
-        "variant_id":10233012781099,
-        "title":"Neonatal Single Tube Monitor Hose",
-        "quantity":1,
-        "price":"30.00",
-        "sku":"714-0019-01",
-        "variant_title":"9'",
-        "vendor":"Non-Invasive Blood Pressure Cuffs",
-        "fulfillment_service":"manual",
-        "product_id":964139221035,
-        "requires_shipping":true,
-        "taxable":true,
-        "gift_card":false,
-        "pre_tax_price":"30.00",
-        "name":"Neonatal Single Tube Monitor Hose - 9'",
-        "variant_inventory_management":null,
-        "properties":[  
+function orderIntake(order){
 
-        ],
-        "product_exists":true,
-        "fulfillable_quantity":1,
-        "grams":0,
-        "total_discount":"0.00",
-        "fulfillment_status":null,
-        "tax_lines":[  
+  var completed_order="";
+  var shipping_method = "";
+  var line_items = order.line_items;
 
-        ]
-     }
-  ],
-  "shipping_lines":[  
+  var customer_tags = order.customer.tags;
+  var customer_account = customer_tags.split(", ").pop();
 
-  ],
-  "billing_address":{  
-     "first_name":"Name",
-     "address1":"78848 148th Ave",
-     "phone":"555-1212",
-     "city":"Redmond",
-     "zip":"78952",
-     "province":"Washington",
-     "country":"United States",
-     "last_name":"Something",
-     "address2":null,
-     "company":"Shipping Address",
-     "latitude":null,
-     "longitude":null,
-     "name":"Name Something",
-     "country_code":"US",
-     "province_code":"WA"
-  },
-  "shipping_address":{  
-     "first_name":"Name",
-     "address1":"78848 148th Ave",
-     "phone":"555-1212",
-     "city":"Redmond",
-     "zip":"78952",
-     "province":"Washington",
-     "country":"United States",
-     "last_name":"Something",
-     "address2":null,
-     "company":"Shipping Address",
-     "latitude":null,
-     "longitude":null,
-     "name":"Name Something",
-     "country_code":"US",
-     "province_code":"WA"
-  },
-  "fulfillments":[  
+  var date = new Date(order.created_at);
+  var short_date = (date.getMonth()+1 +'/' + date.getDate() + '/' + date.getFullYear());
 
-  ],
-  "refunds":[  
+  var date_added = addDays(order.created_at, 3);
+  var ship_date = (date_added.getMonth()+1 +'/' + date_added.getDate() + '/' + date_added.getFullYear());
 
-  ],
-  "customer":{  
-     "id":529391910955,
-     "email":"mason@spacelabs.com",
-     "accepts_marketing":false,
-     "created_at":"2018-03-23T12:46:58-07:00",
-     "updated_at":"2018-03-23T16:06:26-07:00",
-     "first_name":"Mason",
-     "last_name":"Halstead",
-     "orders_count":10,
-     "state":"enabled",
-     "total_spent":"393.00",
-     "last_order_id":417742422059,
-     "note":null,
-     "verified_email":true,
-     "multipass_identifier":null,
-     "tax_exempt":false,
-     "phone":"+14252837999",
-     "tags":"",
-     "last_order_name":"#SP1037",
-     "default_address":{  
-        "id":548110925867,
-        "customer_id":529391910955,
-        "first_name":"Name",
-        "last_name":"Something",
-        "company":"Shipping Address",
-        "address1":"78848 148th Ave",
-        "address2":null,
-        "city":"Redmond",
-        "province":"Washington",
-        "country":"United States",
-        "zip":"78952",
-        "phone":"555-1212",
-        "name":"Name Something",
-        "province_code":"WA",
-        "country_code":"US",
-        "country_name":"United States",
-        "default":true
-     }
+  if(order.shipping_lines[0]){
+
+    shipping_method = order.shipping_lines[0].source + " - " + order.shipping_lines[0].title;
+  }else{
+
+    shipping_method = "Shopify Undefined";
   }
-};
 
+  var order_header = {
+    "Row ID": "H",
+    "Transaction ID": "850",
+    "Accounting ID": customer_account,
+    "Purchase Order Number": order.id,
+    "PO Date": short_date,
+    "Ship To Name": order.shipping_address.first_name,
+    "Ship To Address - Line One": order.shipping_address.address1,
+    "Ship To Address - Line Two": order.shipping_address.address2,
+    "Ship To City": order.shipping_address.city,
+    "Ship To State": order.shipping_address.province,
+    "Ship To Zip code": order.shipping_address.zip,
+    "Ship To Country": order.shipping_address.country,
+    "Store #": "",
+    "Bill To Name": order.billing_address.first_name,
+    "Bill To Address - Line One": order.billing_address.address1,
+    "Bill To Address - Line Two": order.billing_address.address2,
+    "Bill To City": order.billing_address.city,
+    "Bill To State": order.billing_address.province,
+    "Bill To Zip code": order.billing_address.zip,
+    "Bill To Country": order.billing_address.country,
+    "Bill To Code": "",
+    "Ship Via": shipping_method,
+    "Ship Date": ship_date,
+    "Terms": "",
+    "Note": "",
+    "Department Number": "",
+    "Cancel Date": "",
+    "Do Not Ship Before": short_date,
+    "Do Not Ship After": short_date,
+    "Allowance Percent1": "",
+    "Allowance Amount1": "",
+    "Allowance Precent2": "",
+    "Allowance Amount2": "",
+  };
 
+  for(var header in order_header){
+
+    completed_order += order_header[header] + "|";
+  }
+
+  for(var items in line_items){
+
+    var line_number = parseInt(items) + 1;
+    var line_item = {
+      "Row ID": "I",
+      "Line #": line_number,
+      "Vendor Part #": "",
+      "Buyer Part #": "",
+      "UPC #": "",
+      "Description": line_items[items].title,
+      "Quantity": line_items[items].quantity,
+      "UOM": "Each",
+      "Unit Price": line_items[items].price,
+      "Pack Size": "",
+      "# of Inner Packs": "",
+      "Item Allowance Percent1": "",
+      "Item Allowance Amount1": "",
+  };
+
+    for(var line in line_item){
+
+      completed_order += line_item[line] + "|";
+    }
+  }  
+  return completed_order;
+}
+
+  module.exports.orderIntake = orderIntake;
   module.exports.shopifyPricingPut = shopifyPricingPut;
-  module.exports.body = body;
   module.exports.customerRecord = customerRecord;
   module.exports.MFG_Request = MFG_Request;
