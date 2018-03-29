@@ -10,6 +10,11 @@ const path = require('path');
 const logger = require('morgan');
 const crypto = require('crypto');
 
+const request = require('request-promise');
+const helpers = require('./helpers');
+const cors = require('cors');
+const bodyParser = require('body-parser');
+
 const webpack = require('webpack');
 const webpackMiddleware = require('webpack-dev-middleware');
 const webpackHotMiddleware = require('webpack-hot-middleware');
@@ -35,12 +40,6 @@ const shopifyConfig = {
   afterAuth(request, response) {
     const { session: { accessToken, shop } } = request;
 
-    // registerWebhook(shop, accessToken, {
-    //   topic: 'orders/create',
-    //   address: `${SHOPIFY_APP_HOST}/order-create`,
-    //   format: 'json'
-    // });
-
     return response.redirect('/');
   },
 };
@@ -55,11 +54,10 @@ const registerWebhook = function(shopDomain, accessToken, webhook) {
 
 const app = express();
 const isDevelopment = NODE_ENV !== 'production';
-const accessLogStream = fs.createWriteStream(path.join(__dirname, 'access.log'), {flags: 'a'});
 
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
-app.use(logger('combined', {stream: accessLogStream}));
+app.use(logger('combined', {stream: fs.createWriteStream('./tmp/access.log', {flags: 'a'})}));
 app.use(logger('dev'));
 
 app.use(
@@ -79,7 +77,7 @@ var apiLimiter = new RateLimit({
   delayMs: 0 
 });
 
-app.use('/ecommerce/', apiLimiter);
+app.use(apiLimiter);
 
 // Run webpack hot reloading in dev
 if (isDevelopment) {
@@ -131,11 +129,6 @@ app.get('/', withShop, function(request, response) {
 // ---------------- MIDDLEWARE INTEGRATION FOR ECOMMERCE SITES ----------------
 // ---------------- MIDDLEWARE INTEGRATION FOR ECOMMERCE SITES ----------------
 
-const request = require('request-promise');
-const helpers = require('./helpers');
-const cors = require('cors');
-const bodyParser = require('body-parser');
-
 app.use(bodyParser.urlencoded({ extended: true }));
 
 var whitelist = ['https://spacelabshealthcare-dev.myshopify.com', 'https://spacelabshealthcare-test.myshopify.com','https://spacelabshealthcare.myshopify.com'];
@@ -171,6 +164,8 @@ app.post('/ecommerce/register', cors(corsOptions), function(req ,res){
 
     res.status(200).send({response: shopify_customer_form});
 
+    helpers.customerIntake(body, domain);
+
   })
   .catch(function (err) {
 
@@ -181,24 +176,7 @@ app.post('/ecommerce/register', cors(corsOptions), function(req ,res){
 
 // ---------------- DYNAMIC SHOPIFY PRICING QUERY + POST TO SHOPIFY ----------------
 
-function middlewareHMACValidator( req, res, next ) {
-
-  var path_prefix = req.query.path_prefix;
-  var shop = req.query.shop;
-  var timestamp = req.query.timestamp;
-  var signature = req.query.signature;
-  var secret = SHOPIFY_APP_SECRET;
-  var sorted_parameters = "path_prefix=" + path_prefix + "shop=" + shop + "timestamp=" + timestamp;
-  var calculated_signature = crypto.createHmac('sha256', secret).update(sorted_parameters).digest('hex');
-
-
-  if (calculated_signature !== signature) {
-    return res.status(400).send({response: "HMAC Validation Failed"});
-  }
-  next();
-}
-
-app.post('/ecommerce/pricing', middlewareHMACValidator, function(req ,res){
+app.post('/ecommerce/pricing', helpers.middlewareHMACValidator, function(req ,res){
   
   console.time("RECIEVE DATA");
   var shopify_data = req.body;
@@ -231,64 +209,24 @@ app.post('/ecommerce/pricing', middlewareHMACValidator, function(req ,res){
   });
 });
 
-// ---------------- ORDER INTAKE ----------------
+// ---------------- ORDER INTAKE + STATIC FILE CREATION ----------------
 
-function webhookHMACValidator(req,res,next){
-
-  var environment = req.get('x-shopify-shop-domain');
-  var sharedSecret="";
-  var environment_folder = "";
-
-  switch(environment) {
-    case 'spacelabshealthcare-dev.myshopify.com':
-      sharedSecret="942d812cbcc1c70db91013c659126d432c21ce33d235af5744f2cf139ab30e2b";
-      environment_folder = "dev/";
-      break;
-    case 'spacelabshealthcare-test.myshopify.com':
-      sharedSecret="942d812cbcc1c70db91013c659126d432c21ce33d235af5744f2cf139ab30e2b";
-      environment_folder = "test/";
-      break;
-    case 'spacelabshealthcare.myshopify.com':
-      sharedSecret="8e4ccaf7dbdedc234dfe5281ac4de44d7cf10245bba734a04b148c073c6b17bf";
-      environment_folder = "prod/";
-      break;
-    default:
-      environment_folder ="error/";
-      sharedSecret="942d812cbcc1c70db91013c659126d432c21ce33d235af5744f2cf139ab30e2b";
-  }
-
-  var generated_hash = crypto.createHmac('sha256', sharedSecret).update(Buffer.from(req.rawbody)).digest('base64');
-
-  if (generated_hash == req.headers['x-shopify-hmac-sha256']) {
-    req.root = environment_folder;
-    next();
-  } else {
-
-    res.sendStatus(403);
-  }
-}
-
-var parsingWebhook = bodyParser.json({type:'*/*',limit: '50mb',verify: function(req, res, buf) {
-    if (req.url.includes('/webhook/')){
-      req.rawbody = buf;
-    }
-  }
-});
-
-app.post('/webhook/order', parsingWebhook, webhookHMACValidator, function(req ,res, next) {
+app.post('/webhook/order', helpers.parsingWebhook, helpers.webhookHMACValidator, function(req ,res, next) {
 
   try {
 
     var order = req.body;
+    var date = new Date(order.created_at);
+    var order_date = (date.getMonth()+1 +'_' + date.getDate() + '_');
     var completed_order = helpers.orderIntake(order);
 
-    fs.writeFile("orders/" + req.root + order.id + '.txt', completed_order, function (err) {
+    fs.writeFile("./tmp/orders/" + req.root + order_date + order.id + '.txt', completed_order, function (error) {
 
-      if (err) throw err;
+      if (error) throw error;
+
       console.log("The file was succesfully saved!");
+      res.sendStatus(200);
     });
-
-    res.sendStatus(200);
   }
   catch(error) {
 

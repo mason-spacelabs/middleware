@@ -50,7 +50,7 @@ const requestFields = {
       "metafields": [
         {
           key: "details",
-          value: "Account #: 7899-45-4577, GPO #: 9988-76-8888, Company: Spacelabs,",
+          value: "Account #: 90022447",
           value_type: "string",
           namespace: "account_data"
         }

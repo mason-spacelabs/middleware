@@ -1,5 +1,22 @@
+// ---------------- MIDDLEWARE INTEGRATION   ----------------
+// ---------------- MIDDLEWARE INTEGRATION   ----------------
+
+require('dotenv').config();
+
+const fs = require('fs');
 const shopify_config = require('./config.json');
 const request = require('request-promise');
+const bodyParser = require('body-parser');
+const crypto = require('crypto');
+
+const {
+  SHOPIFY_APP_KEY,
+  SHOPIFY_APP_HOST,
+  SHOPIFY_APP_SECRET,
+  NODE_ENV,
+} = process.env;
+
+// ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/REGISTER - CUSTOMER RECORD  ----------------
 
 function customerRecord(registration_data, domain){
 
@@ -61,6 +78,42 @@ function customerRecord(registration_data, domain){
     return options;
 }
 
+// ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/REGISTER - MFG PRO INTAKE FILE  ----------------
+
+function customerIntake(body, domain){
+  var customer_intake = "";
+  var customer_headers = {
+    "Row ID": "H",
+    "Transaction ID": 850,
+    "Shopify Customer ID": body.customer.id,
+    "Email": body.customer.email,
+    "First Name":body.customer.first_name,
+    "Last Name": body.customer.last_name,
+    "Phone Number":body.customer.phone,
+    "Shopify Billing ID": body.customer.addresses["2"].id,
+    "Shopify Facility ID": body.customer.addresses["1"].id,
+    "Shopify Shipping ID": body.customer.addresses["0"].id
+  };
+
+  for(var header in customer_headers){
+
+    customer_intake += customer_headers[header] + "|";
+  }
+
+  var domain_config = shopify_config[domain];
+  var environment_folder = domain_config.environment + '/';
+
+  fs.writeFile("./tmp/customers/" + environment_folder + body.customer.id + '.txt', customer_intake, function (error) {
+
+    if (error) throw error;
+
+    console.log("The file was succesfully saved!");
+    
+  });
+}
+
+// ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/PRICING - MFG PRICING REQUEST ----------------
+
 function MFG_Request(shopify_pricing){
 
     console.timeEnd("RECIEVE DATA");
@@ -74,7 +127,6 @@ function MFG_Request(shopify_pricing){
         console.time("TRANSFORM PRICING");
 
         var raw = response;
-        console.log(shopify_pricing.options);
         var rawArray = raw.split('|');
         var increaseKey = 0;
         var increaseValue = 0;
@@ -135,6 +187,8 @@ function MFG_Request(shopify_pricing){
   return promise;
   }
 
+// ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/PRICING - SHOPIFY PRICING POST ----------------
+
 function shopifyPricingPut(shopify_data) {
 
     var domain = shopify_data.customer.domain;
@@ -172,6 +226,25 @@ function shopifyPricingPut(shopify_data) {
     return promise;
  }
 
+// ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/PRICING - HMAC VALIDATION FROM SHOPIFY ----------------
+
+function middlewareHMACValidator( req, res, next ) {
+  var path_prefix = req.query.path_prefix;
+  var shop = req.query.shop;
+  var timestamp = req.query.timestamp;
+  var signature = req.query.signature;
+  var secret = SHOPIFY_APP_SECRET;
+  var sorted_parameters = "path_prefix=" + path_prefix + "shop=" + shop + "timestamp=" + timestamp;
+  var calculated_signature = crypto.createHmac('sha256', secret).update(sorted_parameters).digest('hex');
+
+  if (calculated_signature !== signature) {
+    return res.status(400).send({response: "HMAC Validation Failed"});
+  }
+  next();
+}
+
+// ---------------- MIDDLEWARE INTEGRATION ROUTE WEBHOOK/ORDERS - CREATE ORDER DATE FOR MFG PRO ----------------
+
 function addDays(date, days) {
 
   var result = new Date(date);
@@ -179,6 +252,8 @@ function addDays(date, days) {
   return result;
 
 }
+
+// ---------------- MIDDLEWARE INTEGRATION ROUTE WEBHOOK/ORDERS - MFG PRO ORDER INTAKE FILE ----------------
 
 function orderIntake(order){
 
@@ -271,7 +346,43 @@ function orderIntake(order){
   return completed_order;
 }
 
-  module.exports.orderIntake = orderIntake;
-  module.exports.shopifyPricingPut = shopifyPricingPut;
-  module.exports.customerRecord = customerRecord;
-  module.exports.MFG_Request = MFG_Request;
+// ---------------- MIDDLEWARE INTEGRATION ROUTE WEBHOOK/ORDERS - HMAC VALIDATION FROM SHOPIFY ----------------
+
+function webhookHMACValidator(req,res,next){
+
+  var environment = req.get('x-shopify-shop-domain');
+  var domain_config = shopify_config[environment];
+  var sharedSecret = domain_config.webhook_secret;
+  var environment_folder = domain_config.environment + '/';
+
+  var generated_hash = crypto.createHmac('sha256', sharedSecret).update(Buffer.from(req.rawbody)).digest('base64');
+
+  if (generated_hash == req.headers['x-shopify-hmac-sha256']) {
+    req.root = environment_folder;
+    next();
+  } else {
+
+    res.sendStatus(403);
+  }
+}
+
+// ---------------- MIDDLEWARE INTEGRATION ROUTE WEBHOOK/ORDERS - WEBHOOK BODY PARSER FROM SHOPIFY ----------------
+
+var parsingWebhook = bodyParser.json({type:'*/*',limit: '50mb',verify: function(req, res, buf) {
+  if (req.url.includes('/webhook/')){
+    req.rawbody = buf;
+  }
+}
+});
+
+// -------------------------------- END --------------------------------
+// -------------------------------- END --------------------------------
+
+module.exports.customerIntake = customerIntake;
+module.exports.middlewareHMACValidator = middlewareHMACValidator;
+module.exports.webhookHMACValidator = webhookHMACValidator;
+module.exports.parsingWebhook = parsingWebhook;
+module.exports.orderIntake = orderIntake;
+module.exports.shopifyPricingPut = shopifyPricingPut;
+module.exports.customerRecord = customerRecord;
+module.exports.MFG_Request = MFG_Request;
