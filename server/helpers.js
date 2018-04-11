@@ -4,10 +4,10 @@
 require('dotenv').config();
 
 const fs = require('fs');
-const shopify_config = require('./config.json');
 const request = require('request-promise');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
+const winston = require('./winston');
 
 const {
   SHOPIFY_APP_KEY,
@@ -16,96 +16,199 @@ const {
   NODE_ENV,
 } = process.env;
 
+// ---------------- MIDDLEWARE ENVIRONMENT CHECK - API ROUTES  ----------------
+
+var environmentValidation = function(response){
+
+  var promise = new Promise(function(resolve, reject){
+
+    var request_object = {
+      response: response.response,
+      domain: response.domain,
+      query_string: process.env.MFG_PRO_TEST,
+      client_api_key: 'client_api_key',
+      client_api_password: 'client_api_password',
+      client_api_webhook: 'client_api_webhook'
+    };
+
+    if(NODE_ENV == 'production'){
+
+      request_object.query_string = process.env.MFG_PRO_PROD;
+      request_object.client_api_key = process.env.SPACELABS_PROD_KEY;
+      request_object.client_api_password = process.env.SPACELABS_PROD_PASSWORD;
+      request_object.client_api_webhook = process.env.SPACELABS_PROD_WEBHOOK;
+
+    }else{
+
+      switch(request_object.domain) {
+        case 'spacelabshealthcare-dev.myshopify.com':
+            
+          request_object.client_api_key = process.env.SPACELABS_DEV_KEY;
+          request_object.client_api_password = process.env.SPACELABS_DEV_PASSWORD;
+          request_object.client_api_webhook = process.env.SPACELABS_DEV_WEBHOOK;
+
+          break;
+        case 'spacelabshealthcare-test.myshopify.com':
+            
+          request_object.client_api_key = process.env.SPACELABS_DEV_KEY;
+          request_object.client_api_password = process.env.SPACELABS_DEV_PASSWORD;
+          request_object.client_api_webhook = process.env.SPACELABS_DEV_WEBHOOK;
+
+          break;
+        default:
+          winston.error("VALIDATION " + request_object.domain + " - Message: Unable to validate ecommerce environment.");
+          reject();
+      }
+      resolve(request_object);
+    }
+  });
+  return promise;
+};
+
 // ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/REGISTER - CUSTOMER RECORD  ----------------
 
-function customerRecord(registration_data, domain){
+function customerRecordCreation(request_object){
 
-    var domain_config = shopify_config[domain];
+  var promise = new Promise(function(resolve, reject){
 
-    var options = {
-      method: 'POST',
-      uri: 'https://' + domain_config.api_key + ':' + domain_config.api_password + '@' + domain + '/admin/customers.json',
-      body: {
-        "customer": {
-          "first_name": registration_data.Firstname,
-          "last_name": registration_data.Lastname,
-          "email": registration_data.email,
-          "phone": "+1" + registration_data.Phone,
-          "verified_email": true,
-          "addresses": [
-            {
-              "company": "Shipping Address",
-              "address1": registration_data.ShippingAddress,
-              "city": registration_data.ShippingAddressCity,
-              "province": registration_data.ShippingAddressState,
-              "phone": registration_data.ShippingContactNumber,
-              "zip": registration_data.ShippingAddressZip,
-              "country": "US"
-            },
-            {
-              "company": "Facility Address",
-                "address1": registration_data.FacilityAddress,
-                "city": registration_data.FacilityAddressCity,
-                "province": registration_data.FacilityAddressState,
-                "phone": registration_data.FacilityContactNumber,
-                "zip": registration_data.FacilityAddressZip,
+    try {
+
+      if(request_object.response.ShippingName == request_object.response.FacilityName || request_object.response.BillingName){
+        FacilityName = request_object.response.FacilityName + " (Facility)";
+        BillingName = request_object.response.BillingName + " (Billing)";
+      }else{
+        FacilityName = request_object.response.FacilityName;
+        BillingName = request_object.response.BillingName;
+      }
+  
+      request_object.options = {
+        method: 'POST',
+        uri: 'https://' + request_object.client_api_key + ':' + request_object.client_api_password + '@' + request_object.domain + '/admin/customers.json',
+        body: {
+          "customer": {
+            "first_name": request_object.response.Firstname,
+            "last_name": request_object.response.Lastname,
+            "email": request_object.response.email,
+            "phone": "+1" + request_object.response.Phone,
+            "tags": "90022447, 90022449",
+            "verified_email": true,
+            "addresses": [{
+                "company": request_object.response.ShippingName,
+                "address1": request_object.response.ShippingAddress,
+                "city": request_object.response.ShippingAddressCity,
+                "province": request_object.response.ShippingAddressState,
+                "phone": request_object.response.ShippingContactNumber,
+                "zip": request_object.response.ShippingAddressZip,
+                "last_name": request_object.response.Lastname,
+                "first_name": request_object.response.Firstname,
                 "country": "US"
-            },
-            {
-              "company": "Billing Address",
-                "address1": registration_data.BillingAddress,
-                "city": registration_data.BillingAddressCity,
-                "province": registration_data.BillingAddressState,
-                "phone": registration_data.BillingContactNumber,
-                "zip": registration_data.BillingAddressZip,
+              },
+              {
+                "company": FacilityName,
+                "address1": request_object.response.FacilityAddress,
+                "city": request_object.response.FacilityAddressCity,
+                "province": request_object.response.FacilityAddressState,
+                "phone": request_object.response.FacilityContactNumber,
+                "last_name": request_object.response.Lastname,
+                "first_name": request_object.response.Firstname,
                 "country": "US"
-            }
-          ],
-          "metafields": [
-            {
-              "key": "details",
-              "value": "Account #:90022447, GPO #: 999-9999, Company: " + registration_data.BillingName + ",",
-              "value_type": "string",
-              "namespace": "account_data"
-            }
-          ],
-          "send_email_invite": false,
-          "send_email_welcome": false
-        }
-      },
-      json: true
-  };
-    return options;
+              },
+              {
+                "company": BillingName,
+                "address1": request_object.response.BillingAddress,
+                "city": request_object.response.BillingAddressCity,
+                "province": request_object.response.BillingAddressState,
+                "phone": request_object.response.BillingContactNumber,
+                "zip": request_object.response.BillingAddressZip,
+                "last_name": request_object.response.Lastname,
+                "first_name": request_object.response.Firstname,
+                "country": "US"
+              },
+            ],          
+            "metafields": [
+              {
+                "key": "details",
+                "value": "Account #:90022447, Company: " + request_object.response.BillingName + ", MFG Pro Bill #:90022448, MFG Pro Ship #:90022449,",
+                "value_type": "string",
+                "namespace": "account_data"
+              }
+            ],
+            "send_email_invite": false,
+            "send_email_welcome": false
+          }
+        },
+        json: true
+      };
+      resolve(request_object);
+    }
+    catch(error) {
+      winston.error("CREATE " + request_object.domain + " - Message: Unable to create Shopify customer post object.");
+      reject();
+    }
+  });
+  return promise;
+}
+
+// ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/REGISTER - CUSTOMER SHOPIFY POST  ----------------
+
+function shopifyCustomerPost(request_object) {
+
+  var promise = new Promise(function(resolve, reject){
+
+    request(request_object.options).then(function (body) {
+
+      request_object.shopify_response = {
+        "Customer": body.customer.id,
+        "Shipping_Address": body.customer.addresses['0'].id,
+        "Facility_Address": body.customer.addresses['1'].id,
+        "Billing_Address": body.customer.addresses['2'].id
+      };
+
+      resolve(request_object);
+
+    })
+    .catch(function (error) {
+
+      reject({error: error.response.body});
+
+    });
+  });
+  return promise;
 }
 
 // ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/REGISTER - MFG PRO INTAKE FILE  ----------------
 
-function customerIntake(body, domain){
+function customerFileCreation(response_object){
+
   var customer_intake = "";
+  var date = new Date();
+  var short_date = date.getMonth()+1 +'_' + date.getDate() + '_';
+
   var customer_headers = {
     "Row ID": "H",
     "Transaction ID": 850,
-    "Shopify Customer ID": body.customer.id,
-    "Email": body.customer.email,
-    "First Name":body.customer.first_name,
-    "Last Name": body.customer.last_name,
-    "Phone Number":body.customer.phone,
-    "Shopify Billing ID": body.customer.addresses["2"].id,
-    "Shopify Facility ID": body.customer.addresses["1"].id,
-    "Shopify Shipping ID": body.customer.addresses["0"].id
+    "Shopify Customer ID": response_object.shopify_response.Customer,
+    "Email": response_object.response.email,
+    "First Name":response_object.response.Firstname,
+    "Last Name": response_object.response.Lastname,
+    "Phone Number":response_object.response.Phone,
+    "Shopify Billing ID": response_object.shopify_response.Billing_Address,
+    "Shopify Facility ID": response_object.shopify_response.Facility_Address,
+    "Shopify Shipping ID": response_object.shopify_response.Shipping_Address
   };
 
   for(var header in customer_headers){
 
     customer_intake += customer_headers[header] + "|";
+
   }
 
-  var domain_config = shopify_config[domain];
-  var environment_folder = domain_config.environment + '/';
+  fs.writeFile("./tmp/customer_request/" + short_date + response_object.shopify_response.Customer + '.txt', customer_intake, function (error) {
 
-  fs.writeFile("./tmp/customers/" + environment_folder + body.customer.id + '.txt', customer_intake, function (error) {
-
-    if (error) throw error;
+    if (error){
+    winston.error("WRITE " + response_object.domain + "/ecommerce/spacelabs/register: Message - Unable to write MFG Pro customer intake file.");
+    throw error;
+    }
 
     console.log("The file was succesfully saved!");
     
@@ -114,24 +217,29 @@ function customerIntake(body, domain){
 
 // ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/PRICING - MFG PRICING REQUEST ----------------
 
-function MFG_Request(shopify_pricing){
+function MFGPricingGet(request_object){
 
-    console.timeEnd("RECIEVE DATA");
-    console.time("GET MFG PRICING");
-    
-    var promise = new Promise(function(resolve, reject){
-    request(shopify_pricing.options)
+  request_object.options = {
+    uri: request_object.query_string + request_object.response.RequestString,
+    headers: {
+      'User-Agent': 'Request-Promise'
+    },
+    json: true
+  };
+
+  var promise = new Promise(function(resolve, reject){
+    request(request_object.options)
       .then(function (response) {
 
-        console.timeEnd("GET MFG PRICING");
-        console.time("TRANSFORM PRICING");
+        var pricingObject = {};
+        var shopifyTagString = "";
+        var shopifyAccounts = "";
+        var increaseKey = 0;
+        var increaseValue = 0;
 
         var raw = response;
         var rawArray = raw.split('|');
-        var increaseKey = 0;
-        var increaseValue = 0;
-        var pricingObject = {};
-  
+        
         for(var i = 0; i < rawArray.length; i++) {
 
           if(rawArray[i].includes("XXX")){
@@ -149,8 +257,6 @@ function MFG_Request(shopify_pricing){
 
           }
         }
-
-        var shopifyTagString = "";
           
         for(var products in pricingObject){
 
@@ -160,75 +266,73 @@ function MFG_Request(shopify_pricing){
           var productRaw = Object.values(pricingObject[products][0]).join(' ');
           var product = productRaw.replace(/\s/g,'');
 
-          var shopifyProductNumberRaw = Object.values(shopify_pricing.shopify_request.Variants[product]).join(' ');
+          var shopifyProductNumberRaw = Object.values(request_object.response.Variants[product]).join(' ');
           var shopifyProduct = shopifyProductNumberRaw.replace(/\s/g,''); 
 
           shopifyTagString += shopifyProduct + ":" + pricing + ", ";
 
         }
 
-        shopifyTagString += pricingObject[products][1].trim();
-        var shopify_data = {
-          "customer": {
-            "id": shopify_pricing.shopify_request.ShopifyCustomerNumber,
-            "tags": shopifyTagString,
-            "domain": shopify_pricing.header,
-          }
-        };
-        resolve(shopify_data);
+        shopifyAccounts = request_object.response.ShopifyFacilityNumber + ", " + request_object.response.ShopifyShippingNumber;
+        shopifyTagString += shopifyAccounts;
+
+        request_object.client_tags = shopifyTagString;
+
+        resolve(request_object);
 
       })
       .catch(function (error) {
 
+        error.message = "Message: Unable to retrieve customer pricing";
+        winston.error("GET " + request_object.options.uri + " - " + error.message);
         reject(error);
 
       });
     });
   return promise;
-  }
+}
 
 // ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/PRICING - SHOPIFY PRICING POST ----------------
 
-function shopifyPricingPut(shopify_data) {
+function shopifyPricingPut(request_object) {
 
-    var domain = shopify_data.customer.domain;
-    var domain_config = shopify_config[domain];
+    request_object.shopify = {
+      method: 'PUT',
+      uri: 'https://' + request_object.client_api_key + ':' + request_object.client_api_password + '@' + request_object.domain + '/admin/customers/' + request_object.response.ShopifyCustomerNumber + '.json',
+      body: {
+        "customer": {
+          "id": request_object.response.ShopifyCustomerNumber,
+          "tags": request_object.client_tags
+        }
+      },
+      json: true
+    };
 
     var promise = new Promise(function(resolve, reject){
 
-      var options = {
-        method: 'PUT',
-        uri: 'https://' + domain_config.api_key + ':' + domain_config.api_password + '@' + domain + '/admin/customers/' + shopify_data.customer.id + '.json',
-        body: {
-          "customer": {
-            "id": shopify_data.customer.id,
-            "tags": shopify_data.customer.tags
-          }
-        },
-        json: true
-      };
+      request(request_object.shopify).then(function (body) {
 
-      console.timeEnd("TRANSFORM PRICING");
-      console.time("SHOPIFY POST PRICING");
-
-      request(options).then(function (body) {
-
-        resolve({response: body});
+        request_object.shopify_response = body;
+        resolve(request_object);
     
       })
       .catch(function (err) {
 
-        reject({error: err.response.body});
+        request_object.shopify_response = err.response.body;
+
+        winston.error("PUT " + request_object.domain + "/admin/customers/" + request_object.response.ShopifyCustomerNumber + ".json - Message:" + request_object.shopify_response);
+
+        reject(request_object);
     
       });
-
     });
-    return promise;
- }
+  return promise;
+}
 
 // ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/PRICING - HMAC VALIDATION FROM SHOPIFY ----------------
 
 function middlewareHMACValidator( req, res, next ) {
+
   var path_prefix = req.query.path_prefix;
   var shop = req.query.shop;
   var timestamp = req.query.timestamp;
@@ -238,6 +342,7 @@ function middlewareHMACValidator( req, res, next ) {
   var calculated_signature = crypto.createHmac('sha256', secret).update(sorted_parameters).digest('hex');
 
   if (calculated_signature !== signature) {
+    winston.error("VALIDATION /ecommerce/spacelabs/pricing: - Message: HMAC validation failed to connect to Shopify Server.");
     return res.status(400).send({response: "HMAC Validation Failed"});
   }
   next();
@@ -255,134 +360,282 @@ function addDays(date, days) {
 
 // ---------------- MIDDLEWARE INTEGRATION ROUTE WEBHOOK/ORDERS - MFG PRO ORDER INTAKE FILE ----------------
 
-function orderIntake(order){
+function orderFileCreation(request_object){
 
-  var completed_order="";
-  var shipping_method = "";
-  var line_items = order.line_items;
+  var promise = new Promise(function(resolve, reject){
 
-  var customer_tags = order.customer.tags;
-  var customer_account = customer_tags.split(", ").pop();
+    var completed_order="";
+    var shipping_method = "";
+    var line_items = request_object.response.line_items;
+    var customer_tags = request_object.response.customer.tags;
+    var tagsArray = customer_tags.split(", ");
+    var facility_number = tagsArray.pop();
+    var shipping_number = tagsArray.pop();
 
-  var date = new Date(order.created_at);
-  var short_date = (date.getMonth()+1 +'/' + date.getDate() + '/' + date.getFullYear());
+    var date = new Date(request_object.response.created_at);
+    var short_date = (date.getMonth()+1 +'/' + date.getDate() + '/' + date.getFullYear());
+    var order_date = (date.getMonth()+1 +'_' + date.getDate() + '_');
 
-  var date_added = addDays(order.created_at, 3);
-  var ship_date = (date_added.getMonth()+1 +'/' + date_added.getDate() + '/' + date_added.getFullYear());
+    var date_added = addDays(request_object.response.created_at, 1);
+    var ship_date = (date_added.getMonth()+1 +'/' + date_added.getDate() + '/' + date_added.getFullYear());
 
-  if(order.shipping_lines[0]){
+    if(request_object.response.shipping_lines[0]){
 
-    shipping_method = order.shipping_lines[0].source + " - " + order.shipping_lines[0].title;
-  }else{
+      shipping_method = request_object.response.shipping_lines[0].source + " - " + request_object.response.shipping_lines[0].title;
+      shipping_cost = request_object.response.shipping_lines[0].price;
 
-    shipping_method = "Shopify Undefined";
-  }
+    }else{
 
-  var order_header = {
-    "Row ID": "H",
-    "Transaction ID": "850",
-    "Accounting ID": customer_account,
-    "Purchase Order Number": order.id,
-    "PO Date": short_date,
-    "Ship To Name": order.shipping_address.first_name,
-    "Ship To Address - Line One": order.shipping_address.address1,
-    "Ship To Address - Line Two": order.shipping_address.address2,
-    "Ship To City": order.shipping_address.city,
-    "Ship To State": order.shipping_address.province,
-    "Ship To Zip code": order.shipping_address.zip,
-    "Ship To Country": order.shipping_address.country,
-    "Store #": "",
-    "Bill To Name": order.billing_address.first_name,
-    "Bill To Address - Line One": order.billing_address.address1,
-    "Bill To Address - Line Two": order.billing_address.address2,
-    "Bill To City": order.billing_address.city,
-    "Bill To State": order.billing_address.province,
-    "Bill To Zip code": order.billing_address.zip,
-    "Bill To Country": order.billing_address.country,
-    "Bill To Code": "",
-    "Ship Via": shipping_method,
-    "Ship Date": ship_date,
-    "Terms": "",
-    "Note": "",
-    "Department Number": "",
-    "Cancel Date": "",
-    "Do Not Ship Before": short_date,
-    "Do Not Ship After": short_date,
-    "Allowance Percent1": "",
-    "Allowance Amount1": "",
-    "Allowance Precent2": "",
-    "Allowance Amount2": "",
-  };
-
-  for(var header in order_header){
-
-    completed_order += order_header[header] + "|";
-  }
-
-  for(var items in line_items){
-
-    var line_number = parseInt(items) + 1;
-    var line_item = {
-      "Row ID": "I",
-      "Line #": line_number,
-      "Vendor Part #": "",
-      "Buyer Part #": "",
-      "UPC #": "",
-      "Description": line_items[items].title,
-      "Quantity": line_items[items].quantity,
-      "UOM": "Each",
-      "Unit Price": line_items[items].price,
-      "Pack Size": "",
-      "# of Inner Packs": "",
-      "Item Allowance Percent1": "",
-      "Item Allowance Amount1": "",
-  };
-
-    for(var line in line_item){
-
-      completed_order += line_item[line] + "|";
+      shipping_method = "Shopify Undefined";
     }
-  }  
-  return completed_order;
+  
+    var order_header = {
+      "Row ID": "H",
+      "MFG Pro Ship-to": shipping_number,
+      "Purchase Order Number": request_object.response.name,
+      "PO Date": short_date,
+      "MFG Pro Facility": facility_number,
+      "Total Price": request_object.response.total_price,
+      "Total Tax": request_object.response.total_tax,
+      "Total Shipping Cost": shipping_cost,
+      "Ship Via": shipping_method,
+      "Ship Date": ship_date,
+      "Total Weight": request_object.response.total_weight
+    };
+  
+    for(var header in order_header){
+
+      completed_order += order_header[header] + "|";
+    }
+  
+    completed_order += "\n";
+  
+    for(var items in line_items){
+
+      var line_number = parseInt(items) + 1;
+      var pack_sku = line_items[items].sku;
+      var pack_size = pack_sku.split('-').pop();
+      var modified_size = "";
+
+      if(pack_size == '00'){
+
+        modified_size = '01';
+
+      }else{
+
+        modified_size = pack_size;
+
+      }
+
+      var line_item = {
+        "Row ID": "I",
+        "Line Number": line_number,
+        "Vendor Part Number": line_items[items].sku,
+        "Description": line_items[items].title,
+        "Quantity": line_items[items].quantity,
+        "UOM": "Each",
+        "Unit Price": line_items[items].price,
+        "Item Weight (Grams)": line_items[items].grams,
+        "Pack Size": modified_size,
+      };
+
+      for(var line in line_item){
+
+        completed_order += line_item[line] + "|";
+
+      }
+
+      completed_order += "\n";
+
+    }  
+  
+    fs.writeFile("./tmp/orders/" + order_date + request_object.response.id + '.txt', completed_order, function (error) {
+  
+      if (error){ 
+
+        winston.error("WRITE /webhook/spacelabs/order: - Message: Unable to write MFG Pro customer order file.");
+        reject();
+      }
+
+      console.log("The file was succesfully saved!");
+      resolve();
+  
+    });
+     
+  });
+  return promise;
 }
 
 // ---------------- MIDDLEWARE INTEGRATION ROUTE WEBHOOK/ORDERS - HMAC VALIDATION FROM SHOPIFY ----------------
 
 function webhookHMACValidator(req,res,next){
 
-  var environment = req.get('x-shopify-shop-domain');
-  var domain_config = shopify_config[environment];
-  var sharedSecret = domain_config.webhook_secret;
-  var environment_folder = domain_config.environment + '/';
+  var request_object = {
+    domain: req.headers['x-shopify-shop-domain'],
+    response: req.body,
+  };
 
-  var generated_hash = crypto.createHmac('sha256', sharedSecret).update(Buffer.from(req.rawbody)).digest('base64');
+  environmentValidation(request_object).then(function(response) {
 
-  if (generated_hash == req.headers['x-shopify-hmac-sha256']) {
-    req.root = environment_folder;
-    next();
-  } else {
+    var generated_hash = crypto.createHmac('sha256', response.client_api_webhook).update(Buffer.from(req.rawbody)).digest('base64');
 
+    if (generated_hash == req.headers['x-shopify-hmac-sha256']) {
+
+      next();
+
+    } else {
+
+      winston.error("VALIDATION /webhook/spacelabs/order: - Message: Webhook HMAC validation failed to connect to Shopify Server.");
+      res.sendStatus(403);
+
+    }
+
+  },function(error) {
+
+    winston.error("SCRIPT /webhook/spacelabs/order: - Message: Script error comparing Shopify HMAC to generated hash.");
     res.sendStatus(403);
-  }
+
+  });
 }
 
 // ---------------- MIDDLEWARE INTEGRATION ROUTE WEBHOOK/ORDERS - WEBHOOK BODY PARSER FROM SHOPIFY ----------------
 
-var parsingWebhook = bodyParser.json({type:'*/*',limit: '50mb',verify: function(req, res, buf) {
+var webhookParsingMiddleware = bodyParser.json({type:'*/*',limit: '50mb',verify: function(req, res, buf) {
   if (req.url.includes('/webhook/')){
     req.rawbody = buf;
   }
 }
 });
 
+// ---------------- MIDDLEWARE INTEGRATION CUSTOMER INTAKE VERIFIED - MFG PRO PARSE FILE TO OBJECT ----------------
+
+var readIntakeFile = function(read_file){
+
+  var promise = new Promise(function(resolve, reject){
+
+    fs.readFile(read_file, {encoding: "utf8"}, function read(error, data) {
+
+      var intakeArray = data.split('|');
+      intakeArray.push(read_file);
+
+      var intakeObject = toObject(intakeArray);
+
+      function toObject(intakeArray) {
+        var intakeObject = {};
+        for (var i = 0; i < intakeArray.length; ++i)
+          if (intakeArray[i] !== undefined) intakeObject[i] = intakeArray[i];
+        return intakeObject;
+      }
+
+      resolve(intakeObject);
+      reject(error);
+    });
+  });
+  return promise;
+};
+
+// ---------------- MIDDLEWARE INTEGRATION CUSTOMER INTAKE VERIFIED - PARSE OBJECT FOR SHOPIFY PUT ----------------
+
+var formatFileIntake = function(intakeObject){
+
+  var data = intakeObject;
+  var promise = new Promise(function(resolve, reject){
+
+    var customer_update = {
+      file_path: {
+        path: data[39]
+      },
+      customer: {
+        id: data[2],
+        first_name: data[5],
+        last_name: data[6],
+        email: data[4],
+        phone: data[7],
+        verified_email: true,
+        tax_exempt: data[8],
+        addresses: [
+          {
+            id: data[9],
+            company: data[10],
+            address1: data[11],
+            city: data[12],
+            province: data[13],
+            phone: data[14],
+            zip: data[15],
+            last_name: data[17],
+            first_name: data[16],
+            country: data[18]
+          },
+          {
+            id: data[19],
+            company: data[20],
+            address1: data[21],
+            city: data[22],
+            province: data[23],
+            phone: data[24],
+            zip: data[25],
+            last_name: data[27],
+            first_name: data[26],
+            country: data[28]
+          },
+          {
+            id: data[29],
+            company: data[30],
+            address1: data[31],
+            city: data[32],
+            province: data[33],
+            phone: data[34],
+            zip: data[35],
+            last_name: data[37],
+            first_name: data[36],
+            country: data[38]
+          }
+        ],
+        "metafields": [
+          {
+            key: "details",
+            value: "Account #:" + data[2] + ", Company: " + data[10] + ",",
+            value_type: "string",
+            namespace: "account_data"
+          },
+        ],
+        "send_email_invite": true
+      }
+    };
+
+    resolve(customer_update);
+  });
+  return promise;
+};
+
 // -------------------------------- END --------------------------------
 // -------------------------------- END --------------------------------
 
-module.exports.customerIntake = customerIntake;
+// ----- GLOBAL FUNCTION -----
+
+module.exports.environmentValidation = environmentValidation;
 module.exports.middlewareHMACValidator = middlewareHMACValidator;
 module.exports.webhookHMACValidator = webhookHMACValidator;
-module.exports.parsingWebhook = parsingWebhook;
-module.exports.orderIntake = orderIntake;
+module.exports.webhookParsingMiddleware = webhookParsingMiddleware;
+
+// ----- /ECOMMERCE/SPACELABS/REGISTER -----
+
+module.exports.customerRecordCreation = customerRecordCreation;
+module.exports.shopifyCustomerPost = shopifyCustomerPost;
+module.exports.customerFileCreation = customerFileCreation;
+
+// ----- /ECOMMERCE/SPACELABS/PRICING -----
+
+module.exports.MFGPricingGet = MFGPricingGet;
 module.exports.shopifyPricingPut = shopifyPricingPut;
-module.exports.customerRecord = customerRecord;
-module.exports.MFG_Request = MFG_Request;
+
+// ----- /WEBHOOK/SPACELABS/ORDERS -----
+
+module.exports.orderFileCreation = orderFileCreation;
+
+
+module.exports.formatFileIntake = formatFileIntake;
+module.exports.readIntakeFile = readIntakeFile;
+
+
+

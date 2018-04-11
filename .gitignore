@@ -5,6 +5,7 @@ node_modules/
 dump.rdb
 main.js
 db.sqlite3
-tmp/*
-server/config.json
-server/access.log
+tmp/customer_request/*
+tmp/customer_verified/*
+tmp/logs/*
+tmp/orders/*

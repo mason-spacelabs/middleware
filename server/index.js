@@ -7,13 +7,14 @@ const session = require('express-session');
 const RateLimit = require('express-rate-limit');
 const RedisStore = require('connect-redis')(session);
 const path = require('path');
-const logger = require('morgan');
+const morgan = require('morgan');
 const crypto = require('crypto');
 
 const request = require('request-promise');
 const helpers = require('./helpers');
-const cors = require('cors');
+const winston = require('./winston');
 const bodyParser = require('body-parser');
+const chokidar = require('chokidar');
 
 const webpack = require('webpack');
 const webpackMiddleware = require('webpack-dev-middleware');
@@ -53,12 +54,12 @@ const registerWebhook = function(shopDomain, accessToken, webhook) {
 }
 
 const app = express();
-const isDevelopment = NODE_ENV !== 'production';
+const isDevelopment = NODE_ENV;
 
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
-app.use(logger('combined', {stream: fs.createWriteStream('./tmp/access.log', {flags: 'a'})}));
-app.use(logger('dev'));
+
+app.use(morgan('combined', { stream: winston.stream }));
 
 app.use(
   session({
@@ -131,110 +132,127 @@ app.get('/', withShop, function(request, response) {
 
 app.use(bodyParser.urlencoded({ extended: true }));
 
-var whitelist = ['https://spacelabshealthcare-dev.myshopify.com', 'https://spacelabshealthcare-test.myshopify.com','https://spacelabshealthcare.myshopify.com'];
-
-var corsOptions = {
-  origin: function (origin, callback) {
-    if (whitelist.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  }
-};
-
 // ---------------- DYNAMIC SHOPIFY REGISTRATION ----------------
 
-app.post('/ecommerce/register', cors(corsOptions), function(req ,res){
+app.post('/ecommerce/spacelabs/register', helpers.middlewareHMACValidator, function(req ,res){
 
-  var registration_data = req.body.contact;
-  var domain_header = req.headers.origin;
-  var domain = domain_header.replace(/^(https?:|)\/\//,'');
+  var request_object = {
+    domain: req.headers['x-forwarded-host'],
+    response: req.body.contact
+  };
 
-  var shopify_customer_record = helpers.customerRecord(registration_data, domain);
+  helpers.environmentValidation(request_object).then(helpers.customerRecordCreation).then(helpers.shopifyCustomerPost).then(function(response) {
 
-  request(shopify_customer_record).then(function (body) {
+    res.status(200).send({response: response.shopify_response});
+    helpers.customerFileCreation(response);
 
-    var shopify_customer_form = {
-      "Customer": body.customer.id,
-      "Shipping_Address": body.customer.addresses["0"].id,
-      "Facility_Address": body.customer.addresses["1"].id,
-      "Billing_Address": body.customer.addresses["2"].id,
-    };
+  },function(error) {
 
-    res.status(200).send({response: shopify_customer_form});
-
-    helpers.customerIntake(body, domain);
-
-  })
-  .catch(function (err) {
-
-    res.status(422).send({error: err.response.body});
+    res.status(404).send(error);
 
   });
 });
 
 // ---------------- DYNAMIC SHOPIFY PRICING QUERY + POST TO SHOPIFY ----------------
 
-app.post('/ecommerce/pricing', helpers.middlewareHMACValidator, function(req ,res){
-  
-  console.time("RECIEVE DATA");
-  var shopify_data = req.body;
-  var domain_header = req.headers.origin;
-  var domain = domain_header.replace(/^(https?:|)\/\//,'');
-  var query_string = "https://qmstest.spacelabshealthcare.com/BMIQ2O/Q2O/GetPricing?openagent&USA&" + shopify_data.RequestString;
+app.post('/ecommerce/spacelabs/pricing', helpers.middlewareHMACValidator, function(req ,res){
 
-  var shopify_pricing = {
-    shopify_request: shopify_data,
-    header: domain,
-    options: {
-      uri: query_string,
-      headers: {
-          'User-Agent': 'Request-Promise'
-      },
-      json: true
-    }
+  var request_object = {
+    domain: req.headers['x-forwarded-host'],
+    response: req.body
   };
 
-  helpers.MFG_Request(shopify_pricing).then(helpers.shopifyPricingPut).then(function(response) {
+  helpers.environmentValidation(request_object).then(helpers.MFGPricingGet).then(helpers.shopifyPricingPut).then(function(response) {
 
-    console.timeEnd("SHOPIFY POST PRICING");
-
-    res.status(200).send({response: response});
+    res.status(200).send({response: response.shopify_response});
 
   },function(error) {
 
-  res.status(400).send({response: error});
+    res.status(403).send({error: error.message});
 
   });
 });
 
 // ---------------- ORDER INTAKE + STATIC FILE CREATION ----------------
 
-app.post('/webhook/order', helpers.parsingWebhook, helpers.webhookHMACValidator, function(req ,res, next) {
+app.post('/webhook/spacelabs/order', helpers.webhookParsingMiddleware, helpers.webhookHMACValidator, function(req ,res, next) {
 
-  try {
+  var request_object = {
+    domain: req.headers['x-shopify-shop-domain'],
+    response: req.body
+  };
 
-    var order = req.body;
-    var date = new Date(order.created_at);
-    var order_date = (date.getMonth()+1 +'_' + date.getDate() + '_');
-    var completed_order = helpers.orderIntake(order);
+  helpers.environmentValidation(request_object).then(helpers.orderFileCreation).then(function(response) {
 
-    fs.writeFile("./tmp/orders/" + req.root + order_date + order.id + '.txt', completed_order, function (error) {
+    res.sendStatus(200);
 
-      if (error) throw error;
+  },function(error) {
 
-      console.log("The file was succesfully saved!");
-      res.sendStatus(200);
-    });
-  }
-  catch(error) {
-
-    console.log(error);
     res.sendStatus(403);
-  }
+
+  });
 });
 
+// ---------------- VALID CUSTOMER UPDATE + WATCH ----------------
+
+var watcher = chokidar.watch('./tmp/customer_verified/intake');
+
+watcher.on('ready', function() { 
+    watcher.on('add', function(path) {
+
+      var file_path = "./" + path.split("\\").join("/");
+
+      helpers.readIntakeFile(file_path).then(helpers.formatFileIntake).then(function (resolve) {
+         
+          console.log(resolve);
+        })
+        .catch(function (error) {
+          console.log(error);
+         
+        });
+    });
+});
+
+// function processFile(customer_intake) {
+
+    // }
+
+    //   customerVerification(path).then(function (resolve) {
+
+    //     fs.unlink(resolve, function(){
+    //       console.log("File has been processed");
+    //     });
+     
+    // })
+    // .catch(function (error) {
+      
+    //     console.log(error);
+     
+    // });
+  function customerVerification(customer_intake) {
+
+    var path = customer_intake;
+
+    var promise = new Promise(function(resolve, reject){
+
+      try {
+
+        var file_path = "./" + path.split("\\").join("/");
+        var file_name = path.split("\\").pop();
+        var target_path = "./tmp/customer_verified/processed/" + file_name;
+
+        fs.createReadStream(file_path).pipe(fs.createWriteStream(target_path));
+
+        resolve(file_path);
+      }
+      catch(error) {
+
+          reject(error);
+
+      }
+    });
+    return promise;
+ }
 // -------------------------------- END --------------------------------
 // -------------------------------- END --------------------------------
 
@@ -248,6 +266,8 @@ app.use(function(req, res, next) {
 app.use(function(error, request, response, next) {
   response.locals.message = error.message;
   response.locals.error = request.app.get('env') === 'development' ? error : {};
+
+  winston.error(err.status || 500 + '-' + err.message + '-' + req.originalUrl + '-' + req.method + '-' + req.ip);
 
   response.status(error.status || 500);
   response.render('error');
