@@ -28,15 +28,22 @@ var environmentValidation = function(response){
       query_string: process.env.MFG_PRO_TEST,
       client_api_key: 'client_api_key',
       client_api_password: 'client_api_password',
-      client_api_webhook: 'client_api_webhook'
+      client_api_webhook: 'client_api_webhook',
+      environment: '',
     };
 
-    if(NODE_ENV == 'production'){
+    if(NODE_ENV == 'production' && request_object.domain == 'spacelabshealthcare.myshopify.com'){
 
       request_object.query_string = process.env.MFG_PRO_PROD;
       request_object.client_api_key = process.env.SPACELABS_PROD_KEY;
       request_object.client_api_password = process.env.SPACELABS_PROD_PASSWORD;
       request_object.client_api_webhook = process.env.SPACELABS_PROD_WEBHOOK;
+      request_object.environment = "PROD";
+
+    }else if(NODE_ENV == 'production' && request_object.domain != 'spacelabshealthcare.myshopify.com'){
+      
+      winston.error("VALIDATION PRODUCTION MODE " + request_object.domain + " - Message: Unable to validate ecommerce environment.");
+      reject(error);
 
     }else{
 
@@ -46,6 +53,7 @@ var environmentValidation = function(response){
           request_object.client_api_key = process.env.SPACELABS_DEV_KEY;
           request_object.client_api_password = process.env.SPACELABS_DEV_PASSWORD;
           request_object.client_api_webhook = process.env.SPACELABS_DEV_WEBHOOK;
+          request_object.environment = "DEV";
 
           break;
         case 'spacelabshealthcare-test.myshopify.com':
@@ -53,11 +61,12 @@ var environmentValidation = function(response){
           request_object.client_api_key = process.env.SPACELABS_DEV_KEY;
           request_object.client_api_password = process.env.SPACELABS_DEV_PASSWORD;
           request_object.client_api_webhook = process.env.SPACELABS_DEV_WEBHOOK;
+          request_object.environment = "TEST";
 
           break;
         default:
           winston.error("VALIDATION " + request_object.domain + " - Message: Unable to validate ecommerce environment.");
-          reject();
+          reject(error);
       }
       resolve(request_object);
     }
@@ -65,6 +74,45 @@ var environmentValidation = function(response){
   return promise;
 };
 
+// ---------------- MIDDLEWARE ENVIRONMENT FILE CHECK - CUSTOMER INTAKE ----------------
+
+var environmentFileValidation = function(response){
+
+  var promise = new Promise(function(resolve, reject){
+
+    var path_format = "./" + response.split("\\").join("/");
+    var file_name = path_format.split('/').pop();
+    var file_environment = file_name.split('_').reverse().pop();
+    var domain = "";
+
+    if(NODE_ENV == 'production'){
+
+      domain = 'spacelabshealthcare.myshopify.com';
+
+    }else{
+      switch(file_environment) {
+        case 'DEV':
+          domain = 'spacelabshealthcare-dev.myshopify.com';
+          break;
+
+        case 'TEST':
+          domain = 'spacelabshealthcare-test.myshopify.com';
+          break;
+
+        default:
+          winston.error("VALIDATION - Message: Unable to validate ecommerce file order intake environment.");
+          reject();
+      }
+    }
+
+    var customer_object = {
+      domain: domain,
+      response: path_format
+    };
+    resolve(customer_object);
+  });
+  return promise;
+};
 // ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/REGISTER - CUSTOMER RECORD  ----------------
 
 function customerRecordCreation(request_object){
@@ -125,14 +173,6 @@ function customerRecordCreation(request_object){
                 "country": "US"
               },
             ],          
-            "metafields": [
-              {
-                "key": "details",
-                "value": "Account #:90022447, Company: " + request_object.response.BillingName + ", MFG Pro Bill #:90022448, MFG Pro Ship #:90022449,",
-                "value_type": "string",
-                "namespace": "account_data"
-              }
-            ],
             "send_email_invite": false,
             "send_email_welcome": false
           }
@@ -142,7 +182,7 @@ function customerRecordCreation(request_object){
       resolve(request_object);
     }
     catch(error) {
-      winston.error("CREATE " + request_object.domain + " - Message: Unable to create Shopify customer post object.");
+      winston.error("CREATE: "+ request_object.environment + " " + request_object.domain + " - Message: Unable to create Shopify customer POST object.");
       reject();
     }
   });
@@ -182,11 +222,9 @@ function customerFileCreation(response_object){
 
   var customer_intake = "";
   var date = new Date();
-  var short_date = date.getMonth()+1 +'_' + date.getDate() + '_';
+  var short_date = date.getMonth()+1 + '_' + date.getDate() + '_';
 
   var customer_headers = {
-    "Row ID": "H",
-    "Transaction ID": 850,
     "Shopify Customer ID": response_object.shopify_response.Customer,
     "Email": response_object.response.email,
     "First Name":response_object.response.Firstname,
@@ -199,14 +237,14 @@ function customerFileCreation(response_object){
 
   for(var header in customer_headers){
 
-    customer_intake += customer_headers[header] + "|";
+    customer_intake += customer_headers[header] + ",";
 
   }
 
-  fs.writeFile("./tmp/customer_request/" + short_date + response_object.shopify_response.Customer + '.txt', customer_intake, function (error) {
+  fs.writeFile("./tmp/customer_request/" + response_object.environment + "_" + short_date + response_object.shopify_response.Customer + '.csv', customer_intake, function (error) {
 
     if (error){
-    winston.error("WRITE " + response_object.domain + "/ecommerce/spacelabs/register: Message - Unable to write MFG Pro customer intake file.");
+    winston.error("WRITE: " + response_object.environment + " " + response_object.domain + "/ecommerce/spacelabs/register: Message - Unable to write MFG Pro customer intake file.");
     throw error;
     }
 
@@ -226,6 +264,9 @@ function MFGPricingGet(request_object){
     },
     json: true
   };
+
+  console.timeEnd("Transforming POST Data");
+  console.time("Retrieved MFG Pro Pricing");
 
   var promise = new Promise(function(resolve, reject){
     request(request_object.options)
@@ -284,7 +325,7 @@ function MFGPricingGet(request_object){
       .catch(function (error) {
 
         error.message = "Message: Unable to retrieve customer pricing";
-        winston.error("GET " + request_object.options.uri + " - " + error.message);
+        winston.error("GET: " + request_object.environment + " " + request_object.options.uri + " - " + error.message);
         reject(error);
 
       });
@@ -308,6 +349,9 @@ function shopifyPricingPut(request_object) {
       json: true
     };
 
+    console.timeEnd("Retrieved MFG Pro Pricing");
+    console.time("POST Pricing to Shopify Admin");
+
     var promise = new Promise(function(resolve, reject){
 
       request(request_object.shopify).then(function (body) {
@@ -320,7 +364,7 @@ function shopifyPricingPut(request_object) {
 
         request_object.shopify_response = err.response.body;
 
-        winston.error("PUT " + request_object.domain + "/admin/customers/" + request_object.response.ShopifyCustomerNumber + ".json - Message:" + request_object.shopify_response);
+        winston.error("PUT: " + request_object.environment + " " + request_object.domain + "/admin/customers/" + request_object.response.ShopifyCustomerNumber + ".json - Message: " + request_object.shopify_response);
 
         reject(request_object);
     
@@ -374,7 +418,7 @@ function orderFileCreation(request_object){
 
     var date = new Date(request_object.response.created_at);
     var short_date = (date.getMonth()+1 +'/' + date.getDate() + '/' + date.getFullYear());
-    var order_date = (date.getMonth()+1 +'_' + date.getDate() + '_');
+    var order_date = (date.getMonth()+1 + '_' + date.getDate() + '_');
 
     var date_added = addDays(request_object.response.created_at, 1);
     var ship_date = (date_added.getMonth()+1 +'/' + date_added.getDate() + '/' + date_added.getFullYear());
@@ -449,11 +493,11 @@ function orderFileCreation(request_object){
 
     }  
   
-    fs.writeFile("./tmp/orders/" + order_date + request_object.response.id + '.txt', completed_order, function (error) {
+    fs.writeFile("./tmp/orders/" + request_object.environment + "_" + order_date + request_object.response.id + '.txt', completed_order, function (error) {
   
       if (error){ 
 
-        winston.error("WRITE /webhook/spacelabs/order: - Message: Unable to write MFG Pro customer order file.");
+        winston.error("WRITE " + request_object.environment + " /webhook/spacelabs/order: - Message: Unable to write MFG Pro customer order file.");
         reject();
       }
 
@@ -509,111 +553,211 @@ var webhookParsingMiddleware = bodyParser.json({type:'*/*',limit: '50mb',verify:
 
 // ---------------- MIDDLEWARE INTEGRATION CUSTOMER INTAKE VERIFIED - MFG PRO PARSE FILE TO OBJECT ----------------
 
-var readIntakeFile = function(read_file){
+var readCustomerIntakeFile = function(customer_object){
 
   var promise = new Promise(function(resolve, reject){
 
-    fs.readFile(read_file, {encoding: "utf8"}, function read(error, data) {
+    fs.readFile(customer_object.response, {encoding: "utf8"}, function read(error, customer_read) {
 
-      var intakeArray = data.split('|');
-      intakeArray.push(read_file);
+      var intake_array = customer_read.split('|');
+      var intake_object = toObject(intake_array);
 
-      var intakeObject = toObject(intakeArray);
-
-      function toObject(intakeArray) {
-        var intakeObject = {};
-        for (var i = 0; i < intakeArray.length; ++i)
-          if (intakeArray[i] !== undefined) intakeObject[i] = intakeArray[i];
-        return intakeObject;
+      function toObject(intake_array) {
+        var intake_object = {};
+        for (var i = 0; i < intake_array.length; ++i)
+          if (intake_array[i] !== undefined) intake_object[i] = intake_array[i];
+        return intake_object;
       }
 
-      resolve(intakeObject);
-      reject(error);
+      customer_object.intake_object = intake_object;
+      customer_object.intake_raw = customer_read;
+
+      if(error != 'null'){
+        resolve(customer_object);
+      }else{
+        reject(error);
+      }
     });
+  });
+  return promise;
+};
+
+var customerIntakeProcessed = function(customer_object){
+
+  var promise = new Promise(function(resolve, reject){
+
+    var file_name = customer_object.response.split('/').pop();
+
+    if(customer_object.shopify_response.errors){
+      fs.writeFile('./tmp/customer_verified/error/' + file_name, customer_object.intake_raw, function (err) {
+        if (err) {                                                 
+                                   
+        }    
+        fs.unlink(customer_object.response, function (err) {            
+          if (err) {                                                 
+                                    
+          }                                                          
+         console.log('File has an Error!');                           
+        });         
+      }); 
+    }else{
+      fs.writeFile('./tmp/customer_verified/processed/' + file_name, customer_object.intake_raw, function (err) {
+        if (err) {                                                 
+                                   
+        }    
+        fs.unlink(customer_object.response, function (err) {            
+          if (err) {                                                 
+                                    
+          }                                                          
+         console.log('File has been Processed!');                           
+        });         
+      }); 
+    }
   });
   return promise;
 };
 
 // ---------------- MIDDLEWARE INTEGRATION CUSTOMER INTAKE VERIFIED - PARSE OBJECT FOR SHOPIFY PUT ----------------
 
-var formatFileIntake = function(intakeObject){
+var formatCustomerIntakeFile = function(customer_object){
 
-  var data = intakeObject;
   var promise = new Promise(function(resolve, reject){
-
-    var customer_update = {
-      file_path: {
-        path: data[39]
-      },
-      customer: {
-        id: data[2],
-        first_name: data[5],
-        last_name: data[6],
-        email: data[4],
-        phone: data[7],
-        verified_email: true,
-        tax_exempt: data[8],
-        addresses: [
-          {
-            id: data[9],
-            company: data[10],
-            address1: data[11],
-            city: data[12],
-            province: data[13],
-            phone: data[14],
-            zip: data[15],
-            last_name: data[17],
-            first_name: data[16],
-            country: data[18]
-          },
-          {
-            id: data[19],
-            company: data[20],
-            address1: data[21],
-            city: data[22],
-            province: data[23],
-            phone: data[24],
-            zip: data[25],
-            last_name: data[27],
-            first_name: data[26],
-            country: data[28]
-          },
-          {
-            id: data[29],
-            company: data[30],
-            address1: data[31],
-            city: data[32],
-            province: data[33],
-            phone: data[34],
-            zip: data[35],
-            last_name: data[37],
-            first_name: data[36],
-            country: data[38]
+    try {
+      customer_object.options = {
+        method: 'PUT',
+        uri: 'https://' + customer_object.client_api_key + ':' + customer_object.client_api_password + '@' + customer_object.domain + '/admin/customers/' + customer_object.intake_object[0] + '.json',
+        body: {
+          "customer": {
+            "id": customer_object.intake_object[0],
+            "first_name": customer_object.intake_object[2],
+            "last_name": customer_object.intake_object[3],
+            "email": customer_object.intake_object[1],
+            "phone": customer_object.intake_object[4],
+            "verified_email": 'true',
+            "tax_exempt": customer_object.intake_object[5],
+            "addresses": [
+              {
+                "id": customer_object.intake_object[6],
+                "company": customer_object.intake_object[8],
+                "address1": customer_object.intake_object[9],
+                "city": customer_object.intake_object[10],
+                "province": customer_object.intake_object[11],
+                "phone": customer_object.intake_object[12],
+                "zip": customer_object.intake_object[13],
+                "last_name": customer_object.intake_object[15],
+                "first_name": customer_object.intake_object[14],
+                "country": customer_object.intake_object[16]
+              },
+              {
+                "id": customer_object.intake_object[17],
+                "company": customer_object.intake_object[19],
+                "address1": customer_object.intake_object[20],
+                "city": customer_object.intake_object[21],
+                "province": customer_object.intake_object[22],
+                "phone": customer_object.intake_object[23],
+                "zip": customer_object.intake_object[24],
+                "last_name": customer_object.intake_object[26],
+                "first_name": customer_object.intake_object[25],
+                "country": customer_object.intake_object[27]
+              },
+              {
+                "id": customer_object.intake_object[28],
+                "company": customer_object.intake_object[30],
+                "address1": customer_object.intake_object[31],
+                "city": customer_object.intake_object[32],
+                "province": customer_object.intake_object[33],
+                "phone": customer_object.intake_object[34],
+                "zip": customer_object.intake_object[35],
+                "last_name": customer_object.intake_object[37],
+                "first_name": customer_object.intake_object[36],
+                "country": customer_object.intake_object[38]
+              }
+            ],
+            "metafields": [
+              {
+                "key": "details",
+                "value": "Account #:" + customer_object.intake_object[18] + ", Company: " + customer_object.intake_object[8] + ", MFG Pro Bill #:"+ customer_object.intake_object[29] + ", MFG Pro Ship #:" + customer_object.intake_object[7] + ",",
+                "value_type": "string",
+                "namespace": "account_data"
+              },
+            ],
           }
-        ],
-        "metafields": [
-          {
-            key: "details",
-            value: "Account #:" + data[2] + ", Company: " + data[10] + ",",
-            value_type: "string",
-            namespace: "account_data"
-          },
-        ],
-        "send_email_invite": true
-      }
-    };
-
-    resolve(customer_update);
+        },
+        json: true
+      };
+      resolve(customer_object);
+    }
+    catch(error) {
+      winston.error("CREATE " + customer_object.environment + " " + customer_object.domain + " - Message: Unable to create Shopify customer PUT object.");
+      reject();
+    }
   });
   return promise;
 };
 
+// ---------------- MIDDLEWARE INTEGRATION SHOPIFY CUSTOMER INTAKE PUT - SHOPIFY PUT API CALL ----------------
+
+function shopifyCustomerPut(customer_object) {
+
+  var promise = new Promise(function(resolve, reject){
+
+    request(customer_object.options).then(function (body) {
+
+      customer_object.shopify_response = body;
+
+      resolve(customer_object);
+
+    })
+    .catch(function (error) {
+
+      customer_object.shopify_response = error.response.body;
+
+      reject(customer_object);
+
+    });
+  });
+  return promise;
+}
+
+// ---------------- MIDDLEWARE INTEGRATION SHOPIFY CUSTOMER INTAKE PUT - SHOPIFY PUT API CALL ----------------
+
+function shopifyCustomerInvite(customer_object) {
+  
+  var promise = new Promise(function(resolve, reject){
+
+    customer_object.invite = {
+      method: 'POST',
+      uri: 'https://' + customer_object.client_api_key + ':' + customer_object.client_api_password + '@' + customer_object.domain + '/admin/customers/' + customer_object.intake_object[0] + '/send_invite.json',
+      body: {
+        "customer_invite": {}
+      },
+      json: true
+    };
+
+    request(customer_object.invite).then(function (body) {
+
+      customer_object.shopify_response = body;
+
+      resolve(customer_object);
+
+    })
+    .catch(function (error) {
+
+      customer_object.shopify_response = error.response.body;
+
+      reject(customer_object);
+
+    });
+  });
+  return promise;
+}
 // -------------------------------- END --------------------------------
 // -------------------------------- END --------------------------------
 
 // ----- GLOBAL FUNCTION -----
 
 module.exports.environmentValidation = environmentValidation;
+module.exports.environmentFileValidation = environmentFileValidation;
 module.exports.middlewareHMACValidator = middlewareHMACValidator;
 module.exports.webhookHMACValidator = webhookHMACValidator;
 module.exports.webhookParsingMiddleware = webhookParsingMiddleware;
@@ -633,9 +777,12 @@ module.exports.shopifyPricingPut = shopifyPricingPut;
 
 module.exports.orderFileCreation = orderFileCreation;
 
+// ----- /WEBHOOK/SPACELABS/ORDERS -----
 
-module.exports.formatFileIntake = formatFileIntake;
-module.exports.readIntakeFile = readIntakeFile;
-
+module.exports.readCustomerIntakeFile = readCustomerIntakeFile;
+module.exports.formatCustomerIntakeFile = formatCustomerIntakeFile;
+module.exports.shopifyCustomerPut = shopifyCustomerPut;
+module.exports.shopifyCustomerInvite = shopifyCustomerInvite;
+module.exports.customerIntakeProcessed = customerIntakeProcessed;
 
 

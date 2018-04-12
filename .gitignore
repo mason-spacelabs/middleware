@@ -6,6 +6,8 @@ dump.rdb
 main.js
 db.sqlite3
 tmp/customer_request/*
-tmp/customer_verified/*
+tmp/customer_verified/error/*
+tmp/customer_verified/intake/*
+tmp/customer_verified/processed/*
 tmp/logs/*
 tmp/orders/*

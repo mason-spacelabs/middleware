@@ -5,7 +5,11 @@ const fs = require('fs');
 const express = require('express');
 const session = require('express-session');
 const RateLimit = require('express-rate-limit');
-const RedisStore = require('connect-redis')(session);
+// const RedisStore = require('connect-redis')(session);
+
+const cookieParser = require('cookie-parser');
+const MemoryStore = require('session-memory-store')(session);
+
 const path = require('path');
 const morgan = require('morgan');
 const crypto = require('crypto');
@@ -60,10 +64,10 @@ app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
 
 app.use(morgan('combined', { stream: winston.stream }));
-
+app.use(cookieParser());
 app.use(
   session({
-    store: isDevelopment ? undefined : new RedisStore(),
+    store: new MemoryStore(),
     secret: SHOPIFY_APP_SECRET,
     resave: true,
     saveUninitialized: false,
@@ -119,6 +123,7 @@ app.use('/', routes);
 
 // Client
 app.get('/', withShop, function(request, response) {
+
   const { session: { shop, accessToken } } = request;
   response.render('app', {
     title: 'Shopify Node App',
@@ -157,13 +162,15 @@ app.post('/ecommerce/spacelabs/register', helpers.middlewareHMACValidator, funct
 
 app.post('/ecommerce/spacelabs/pricing', helpers.middlewareHMACValidator, function(req ,res){
 
+  console.time("Transforming POST Data");
   var request_object = {
     domain: req.headers['x-forwarded-host'],
     response: req.body
   };
 
   helpers.environmentValidation(request_object).then(helpers.MFGPricingGet).then(helpers.shopifyPricingPut).then(function(response) {
-
+    
+    console.timeEnd("POST Pricing to Shopify Admin");
     res.status(200).send({response: response.shopify_response});
 
   },function(error) {
@@ -199,75 +206,35 @@ var watcher = chokidar.watch('./tmp/customer_verified/intake');
 
 watcher.on('ready', function() { 
     watcher.on('add', function(path) {
+      
+      helpers.environmentFileValidation(path).then(helpers.environmentValidation).then(helpers.readCustomerIntakeFile).then(helpers.formatCustomerIntakeFile).then(helpers.shopifyCustomerPut).then(helpers.shopifyCustomerInvite).then(function (resolve) {
 
-      var file_path = "./" + path.split("\\").join("/");
+          helpers.customerIntakeProcessed(resolve);
 
-      helpers.readIntakeFile(file_path).then(helpers.formatFileIntake).then(function (resolve) {
-         
-          console.log(resolve);
         })
         .catch(function (error) {
-          console.log(error);
-         
+          
+          helpers.customerIntakeProcessed(error);
+      
         });
     });
 });
 
-// function processFile(customer_intake) {
-
-    // }
-
-    //   customerVerification(path).then(function (resolve) {
-
-    //     fs.unlink(resolve, function(){
-    //       console.log("File has been processed");
-    //     });
-     
-    // })
-    // .catch(function (error) {
-      
-    //     console.log(error);
-     
-    // });
-  function customerVerification(customer_intake) {
-
-    var path = customer_intake;
-
-    var promise = new Promise(function(resolve, reject){
-
-      try {
-
-        var file_path = "./" + path.split("\\").join("/");
-        var file_name = path.split("\\").pop();
-        var target_path = "./tmp/customer_verified/processed/" + file_name;
-
-        fs.createReadStream(file_path).pipe(fs.createWriteStream(target_path));
-
-        resolve(file_path);
-      }
-      catch(error) {
-
-          reject(error);
-
-      }
-    });
-    return promise;
- }
 // -------------------------------- END --------------------------------
 // -------------------------------- END --------------------------------
 
 // Error Handlers
 app.use(function(req, res, next) {
-  const err = new Error('Not Found');
-  err.status = 404;
-  next(err);
+  const error = new Error('Not Found');
+  error.status = 404;
+  next(error);
 });
 
 app.use(function(error, request, response, next) {
   response.locals.message = error.message;
   response.locals.error = request.app.get('env') === 'development' ? error : {};
 
-  winston.error(err.status || 500 + '-' + err.message + '-' + req.originalUrl + '-' + req.method + '-' + req.ip);
+  winston.error(error.status || 500 + '-' + error.message + '-' + request.originalUrl + '-' + request.method + '-' + request.ip);
 
   response.status(error.status || 500);
   response.render('error');
