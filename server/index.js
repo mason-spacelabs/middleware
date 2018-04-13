@@ -5,7 +5,6 @@ const fs = require('fs');
 const express = require('express');
 const session = require('express-session');
 const RateLimit = require('express-rate-limit');
-// const RedisStore = require('connect-redis')(session);
 
 const cookieParser = require('cookie-parser');
 const MemoryStore = require('session-memory-store')(session);
@@ -137,7 +136,7 @@ app.get('/', withShop, function(request, response) {
 
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// ---------------- DYNAMIC SHOPIFY REGISTRATION ----------------
+// ---------------- DYNAMIC SHOPIFY APPLICATION PROXY REGISTRATION ----------------
 
 app.post('/ecommerce/spacelabs/register', helpers.middlewareHMACValidator, function(req ,res){
 
@@ -158,7 +157,7 @@ app.post('/ecommerce/spacelabs/register', helpers.middlewareHMACValidator, funct
   });
 });
 
-// ---------------- DYNAMIC SHOPIFY PRICING QUERY + POST TO SHOPIFY ----------------
+// ---------------- DYNAMIC SHOPIFY APPLICATION PROXY PRICING ----------------
 
 app.post('/ecommerce/spacelabs/pricing', helpers.middlewareHMACValidator, function(req ,res){
 
@@ -180,7 +179,7 @@ app.post('/ecommerce/spacelabs/pricing', helpers.middlewareHMACValidator, functi
   });
 });
 
-// ---------------- ORDER INTAKE + STATIC FILE CREATION ----------------
+// ---------------- DYNAMIC SHOPIFY WEBHOOK ORDER INTAKE ----------------
 
 app.post('/webhook/spacelabs/order', helpers.webhookParsingMiddleware, helpers.webhookHMACValidator, function(req ,res, next) {
 
@@ -200,7 +199,7 @@ app.post('/webhook/spacelabs/order', helpers.webhookParsingMiddleware, helpers.w
   });
 });
 
-// ---------------- VALID CUSTOMER UPDATE + WATCH ----------------
+// ---------------- MIDDLEWARE CUSTOMER VERIFICATION SHOPIFY POST AND INVITE ----------------
 
 var watcher = chokidar.watch('./tmp/customer_verified/intake');
 

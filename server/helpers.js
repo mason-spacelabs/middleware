@@ -209,6 +209,7 @@ function shopifyCustomerPost(request_object) {
     })
     .catch(function (error) {
 
+      winston.error("POST: "+ request_object.environment + " " + request_object.domain + " - Message: " + JSON.stringify(error.response.body));
       reject({error: error.response.body});
 
     });
@@ -575,6 +576,7 @@ var readCustomerIntakeFile = function(customer_object){
       if(error != 'null'){
         resolve(customer_object);
       }else{
+        winston.error("READ " + customer_object.environment + " : Message - Unable to read MFG Pro verified customer intake file.");
         reject(error);
       }
     });
@@ -589,13 +591,13 @@ var customerIntakeProcessed = function(customer_object){
     var file_name = customer_object.response.split('/').pop();
 
     if(customer_object.shopify_response.errors){
-      fs.writeFile('./tmp/customer_verified/error/' + file_name, customer_object.intake_raw, function (err) {
-        if (err) {                                                 
-                                   
+      fs.writeFile('./tmp/customer_verified/error/' + file_name, customer_object.intake_raw, function (error) {
+        if (error) {                                                 
+          winston.error("WRITE " + customer_object.environment + " : Message - Customer intake file cannot be created in the ERROR directory.");                         
         }    
-        fs.unlink(customer_object.response, function (err) {            
-          if (err) {                                                 
-                                    
+        fs.unlink(customer_object.response, function (error) {            
+          if (error) {                                                 
+            winston.error("WRITE " + customer_object.environment + " : Message - Customer intake file cannot be removed from the INTAKE directory.");                          
           }                                                          
          console.log('File has an Error!');                           
         });         
@@ -603,11 +605,11 @@ var customerIntakeProcessed = function(customer_object){
     }else{
       fs.writeFile('./tmp/customer_verified/processed/' + file_name, customer_object.intake_raw, function (err) {
         if (err) {                                                 
-                                   
+          winston.error("WRITE " + customer_object.environment + " : Message - Customer intake file cannot be created in the PROCESSED directory.");                             
         }    
         fs.unlink(customer_object.response, function (err) {            
           if (err) {                                                 
-                                    
+            winston.error("WRITE " + customer_object.environment + " : Message - Customer intake file cannot be removed from the INTAKE directory.");                        
           }                                                          
          console.log('File has been Processed!');                           
         });         
@@ -711,7 +713,7 @@ function shopifyCustomerPut(customer_object) {
     .catch(function (error) {
 
       customer_object.shopify_response = error.response.body;
-
+      winston.error("PUT: "+ customer_object.environment + " " + customer_object.domain + " - Message: " + JSON.stringify(error.response.body));
       reject(customer_object);
 
     });
@@ -744,7 +746,7 @@ function shopifyCustomerInvite(customer_object) {
     .catch(function (error) {
 
       customer_object.shopify_response = error.response.body;
-
+      winston.error("POST: " + customer_object.environment + " " + customer_object.domain + " - Message: " + JSON.stringify(error.response.body));
       reject(customer_object);
 
     });
