@@ -8,6 +8,7 @@ const request = require('request-promise');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const winston = require('./winston');
+const nodemailer = require('nodemailer');
 
 const {
   SHOPIFY_APP_KEY,
@@ -74,6 +75,39 @@ var environmentValidation = function(response){
   return promise;
 };
 
+// ---------------- MIDDLEWARE NODE MAILER - ERROR: ECONNREFUSED FIREWALL 178.32.207.71:587 ISSUE ---------------- //
+
+function sendErrorMail() {
+  nodemailer.createTestAccount((err, account) => {
+
+    let transporter = nodemailer.createTransport({
+      host: 'smtp.ethereal.email',
+      port: 587,
+      secure: false, // true for 465, false for other ports
+      auth: {
+        user: account.user, // generated ethereal user
+        pass: account.pass // generated ethereal password
+      }
+    });
+
+    let mailOptions = {
+      from: '"Fred Foo 👻" <foo@example.com>',
+      to: 'mason@krowdspace.com',
+      subject: 'Hello ✔',
+      text: 'Hello world?',
+      html: '<b>Hello world?</b>'
+    };
+
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        return console.log(error);
+      }
+      console.log('Message sent: %s', info.messageId);
+      console.log('Preview URL: %s', nodemailer.getTestMessageUrl(info));
+    });
+  });
+}
+
 // ---------------- MIDDLEWARE ENVIRONMENT FILE CHECK - CUSTOMER INTAKE ----------------
 
 var environmentFileValidation = function(response){
@@ -138,7 +172,7 @@ function customerRecordCreation(request_object){
             "last_name": request_object.response.Lastname,
             "email": request_object.response.email,
             "phone": "+1" + request_object.response.Phone,
-            "tags": "90022447, 90022449",
+            "tags": "F90022447, S90022449, B90022450",
             "verified_email": true,
             "addresses": [{
                 "company": request_object.response.ShippingName,
@@ -315,7 +349,7 @@ function MFGPricingGet(request_object){
 
         }
 
-        shopifyAccounts = request_object.response.ShopifyFacilityNumber + ", " + request_object.response.ShopifyShippingNumber;
+        shopifyAccounts = "F" + request_object.response.ShopifyFacilityNumber + ", S" + request_object.response.ShopifyShippingNumber + ", B" + request_object.response.ShopifyBillingNumber;
         shopifyTagString += shopifyAccounts;
 
         request_object.client_tags = shopifyTagString;
@@ -414,8 +448,9 @@ function orderFileCreation(request_object){
     var line_items = request_object.response.line_items;
     var customer_tags = request_object.response.customer.tags;
     var tagsArray = customer_tags.split(", ");
-    var facility_number = tagsArray.pop();
-    var shipping_number = tagsArray.pop();
+    var facility_number = tagsArray.pop().slice(1, 15);
+    var shipping_number = tagsArray.pop().slice(1, 15);
+    var billing_number = tagsArray.pop().slice(1, 15);
 
     var date = new Date(request_object.response.created_at);
     var short_date = (date.getMonth()+1 +'/' + date.getDate() + '/' + date.getFullYear());
@@ -437,13 +472,15 @@ function orderFileCreation(request_object){
     var order_header = {
       "Row ID": "H",
       "MFG Pro Ship-to": shipping_number,
+      "MFG Pro Bill-to": billing_number,
       "Purchase Order Number": request_object.response.name,
       "PO Date": short_date,
       "MFG Pro Facility": facility_number,
       "Total Price": request_object.response.total_price,
       "Total Tax": request_object.response.total_tax,
       "Total Shipping Cost": shipping_cost,
-      "Ship Via": shipping_method,
+      // "Ship Via": shipping_method,
+      "Ship Via": 'FEDEX99',
       "Ship Date": ship_date,
       "Total Weight": request_object.response.total_weight
     };
@@ -576,7 +613,7 @@ var readCustomerIntakeFile = function(customer_object){
       if(error != 'null'){
         resolve(customer_object);
       }else{
-        winston.error("READ " + customer_object.environment + " : Message - Unable to read MFG Pro verified customer intake file.");
+        winston.error("READ " + customer_object.environment + " - MFG PRO PARSE FILE TO OBJECT: Message - Unable to read MFG Pro verified customer intake file.");
         reject(error);
       }
     });
@@ -593,11 +630,11 @@ var customerIntakeProcessed = function(customer_object){
     if(customer_object.shopify_response.errors){
       fs.writeFile('./tmp/customer_verified/error/' + file_name, customer_object.intake_raw, function (error) {
         if (error) {                                                 
-          winston.error("WRITE " + customer_object.environment + " : Message - Customer intake file cannot be created in the ERROR directory.");                         
+          winston.error("WRITE " + customer_object.environment + " - MFG PRO PARSE OBJECT CREATE ERROR FILE: : Message - Customer intake file cannot be created in the ERROR directory.");                         
         }    
         fs.unlink(customer_object.response, function (error) {            
           if (error) {                                                 
-            winston.error("WRITE " + customer_object.environment + " : Message - Customer intake file cannot be removed from the INTAKE directory.");                          
+            winston.error("WRITE " + customer_object.environment + " - MFG PRO PARSE OBJECT DELETE INTAKE FILE : Message - Customer intake file cannot be removed from the INTAKE directory.");                          
           }                                                          
          console.log('File has an Error!');                           
         });         
@@ -605,11 +642,11 @@ var customerIntakeProcessed = function(customer_object){
     }else{
       fs.writeFile('./tmp/customer_verified/processed/' + file_name, customer_object.intake_raw, function (err) {
         if (err) {                                                 
-          winston.error("WRITE " + customer_object.environment + " : Message - Customer intake file cannot be created in the PROCESSED directory.");                             
+          winston.error("WRITE " + customer_object.environment + " - MFG PRO PARSE OBJECT CREATE PROCESSED FILE: Message - Customer intake file cannot be created in the PROCESSED directory.");                             
         }    
         fs.unlink(customer_object.response, function (err) {            
           if (err) {                                                 
-            winston.error("WRITE " + customer_object.environment + " : Message - Customer intake file cannot be removed from the INTAKE directory.");                        
+            winston.error("WRITE " + customer_object.environment + " - MFG PRO PARSE OBJECT DELETE INTAKE FILE : Message - Customer intake file cannot be removed from the INTAKE directory.");                        
           }                                                          
          console.log('File has been Processed!');                           
         });         
@@ -624,6 +661,23 @@ var customerIntakeProcessed = function(customer_object){
 var formatCustomerIntakeFile = function(customer_object){
 
   var promise = new Promise(function(resolve, reject){
+
+    var tax_exempt = '';
+
+    if(customer_object.intake_object[5] == 'no'){
+      tax_exempt = false;
+    }else{
+      tax_exempt = true;
+    }
+
+    var company_billing = customer_object.intake_object[8];
+    var company_facility = customer_object.intake_object[19];
+    var company_shipping = customer_object.intake_object[30];
+    
+    if(customer_object.intake_object[30] == customer_object.intake_object[8] || customer_object.intake_object[19]){
+      company_billing = customer_object.intake_object[8] + " (Billing)";
+      company_facility = customer_object.intake_object[19] + " (Facility)";
+    } 
     try {
       customer_object.options = {
         method: 'PUT',
@@ -636,49 +690,49 @@ var formatCustomerIntakeFile = function(customer_object){
             "email": customer_object.intake_object[1],
             "phone": customer_object.intake_object[4],
             "verified_email": 'true',
-            "tax_exempt": customer_object.intake_object[5],
+            "tax_exempt": tax_exempt,
             "addresses": [
               {
                 "id": customer_object.intake_object[6],
-                "company": customer_object.intake_object[8],
+                "company": company_billing,
                 "address1": customer_object.intake_object[9],
                 "city": customer_object.intake_object[10],
                 "province": customer_object.intake_object[11],
                 "phone": customer_object.intake_object[12],
                 "zip": customer_object.intake_object[13],
-                "last_name": customer_object.intake_object[15],
-                "first_name": customer_object.intake_object[14],
-                "country": customer_object.intake_object[16]
+                "first_name": customer_object.intake_object[2],
+                "last_name": customer_object.intake_object[3],
+                "country": 'US'
               },
               {
                 "id": customer_object.intake_object[17],
-                "company": customer_object.intake_object[19],
+                "company": company_facility,
                 "address1": customer_object.intake_object[20],
                 "city": customer_object.intake_object[21],
                 "province": customer_object.intake_object[22],
                 "phone": customer_object.intake_object[23],
                 "zip": customer_object.intake_object[24],
-                "last_name": customer_object.intake_object[26],
-                "first_name": customer_object.intake_object[25],
-                "country": customer_object.intake_object[27]
+                "first_name": customer_object.intake_object[2],
+                "last_name": customer_object.intake_object[3],
+                "country": 'US'
               },
               {
                 "id": customer_object.intake_object[28],
-                "company": customer_object.intake_object[30],
+                "company": company_shipping,
                 "address1": customer_object.intake_object[31],
                 "city": customer_object.intake_object[32],
                 "province": customer_object.intake_object[33],
                 "phone": customer_object.intake_object[34],
                 "zip": customer_object.intake_object[35],
-                "last_name": customer_object.intake_object[37],
-                "first_name": customer_object.intake_object[36],
-                "country": customer_object.intake_object[38]
+                "first_name": customer_object.intake_object[2],
+                "last_name": customer_object.intake_object[3],
+                "country": 'US'
               }
             ],
             "metafields": [
               {
                 "key": "details",
-                "value": "Account #:" + customer_object.intake_object[18] + ", Company: " + customer_object.intake_object[8] + ", MFG Pro Bill #:"+ customer_object.intake_object[29] + ", MFG Pro Ship #:" + customer_object.intake_object[7] + ",",
+                "value": "Account #:" + "F" + customer_object.intake_object[18] + ", Company: " + customer_object.intake_object[30] + ", MFG Pro Bill #:" + "B" + customer_object.intake_object[7] + ", MFG Pro Ship #:" + "S" + customer_object.intake_object[29] + ",",
                 "value_type": "string",
                 "namespace": "account_data"
               },
@@ -690,7 +744,7 @@ var formatCustomerIntakeFile = function(customer_object){
       resolve(customer_object);
     }
     catch(error) {
-      winston.error("CREATE " + customer_object.environment + " " + customer_object.domain + " - Message: Unable to create Shopify customer PUT object.");
+      winston.error("CREATE " + customer_object.environment + " - PARSE OBJECT FOR SHOPIFY PUT: " + customer_object.domain + " - Message: Unable to create Shopify customer PUT object.");
       reject();
     }
   });
@@ -713,7 +767,7 @@ function shopifyCustomerPut(customer_object) {
     .catch(function (error) {
 
       customer_object.shopify_response = error.response.body;
-      winston.error("PUT: "+ customer_object.environment + " " + customer_object.domain + " - Message: " + JSON.stringify(error.response.body));
+      winston.error("PUT "+ customer_object.environment + " - SHOPIFY API CALL UPDATE CUSTOMER: " + customer_object.domain + " - Message: " + JSON.stringify(error.response.body));
       reject(customer_object);
 
     });
