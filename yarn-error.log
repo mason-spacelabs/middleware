@@ -46,7 +46,7 @@ npm manifest:
       "body-parser": "^1.18.2",
       "chalk": "^1.1.3",
       "chokidar": "^2.0.3",
-      "connect-redis": "^3.3.0",
+      "cookie-parser": "^1.4.3",
       "cookie-session": "^2.0.0-beta.3",
       "cross-env": "^5.1.3",
       "crypto": "^1.0.1",
@@ -58,20 +58,23 @@ npm manifest:
       "express-rate-limit": "^2.11.0",
       "express-session": "^1.15.3",
       "knex": "^0.13.0",
+      "md5": "^2.2.1",
+      "mkdirp": "^0.5.1",
       "morgan": "~1.8.1",
       "node-watch": "^0.5.8",
+      "nodemailer": "^4.6.4",
       "raw-body": "^2.3.2",
       "react": "^16.2.0",
       "react-dom": "^16.2.0",
       "react-object-inspector": "^0.2.1",
       "react-redux": "^5.0.5",
-      "redis": "^2.7.1",
       "redux": "^3.6.0",
       "redux-logger": "^3.0.6",
       "redux-thunk": "^2.2.0",
       "request": "^2.85.0",
       "request-promise": "^4.2.2",
       "rimraf": "^2.6.2",
+      "session-memory-store": "^0.2.2",
       "shopify-api-node": "^2.11.0",
       "sqlite3": "^3.1.9",
       "url": "^0.11.0",
@@ -87,6 +90,7 @@ npm manifest:
       "babel-preset-env": "^1.5.2",
       "babel-preset-es2015": "^6.24.1",
       "babel-preset-react": "^6.24.1",
+      "cors": "^2.8.4",
       "css-loader": "^0.28.4",
       "eslint": "3.19.0",
       "eslint-plugin-prettier": "^2.1.2",
@@ -94,6 +98,7 @@ npm manifest:
       "postcss-loader": "^2.0.6",
       "prettier": "^1.5.2",
       "react-hot-loader": "^3.0.0-beta.7",
+      "ssh2": "^0.6.0",
       "style-loader": "^0.18.2",
       "webpack": "^2.6.1",
       "webpack-dev-server": "^2.4.5"
@@ -431,7 +436,7 @@ Lockfile:
       inherits "^2.0.1"
       minimalistic-assert "^1.0.0"
   
-  asn1@~0.2.3:
+  asn1@~0.2.0, asn1@~0.2.3:
     version "0.2.3"
     resolved "https://registry.yarnpkg.com/asn1/-/asn1-0.2.3.tgz#dac8787713c9966849fc8180777ebe9c1ddf3b86"
   
@@ -1521,6 +1526,10 @@ Lockfile:
     dependencies:
       mimic-response "^1.0.0"
   
+  clone@1.0.x:
+    version "1.0.4"
+    resolved "https://registry.yarnpkg.com/clone/-/clone-1.0.4.tgz#da309cc263df15994c688ca902179ca3c7cd7c7e"
+  
   clone@^1.0.2:
     version "1.0.3"
     resolved "https://registry.yarnpkg.com/clone/-/clone-1.0.3.tgz#298d7e2231660f40c003c2ed3140decf3f53085f"
@@ -1677,6 +1686,13 @@ Lockfile:
     version "1.5.1"
     resolved "https://registry.yarnpkg.com/convert-source-map/-/convert-source-map-1.5.1.tgz#b8278097b9bc229365de5c62cf5fcaed8b5599e5"
   
+  cookie-parser@^1.4.3:
+    version "1.4.3"
+    resolved "https://registry.yarnpkg.com/cookie-parser/-/cookie-parser-1.4.3.tgz#0fe31fa19d000b95f4aadf1f53fdc2b8a203baa5"
+    dependencies:
+      cookie "0.3.1"
+      cookie-signature "1.0.6"
+  
   cookie-session@^2.0.0-beta.3:
     version "2.0.0-beta.3"
     resolved "https://registry.yarnpkg.com/cookie-session/-/cookie-session-2.0.0-beta.3.tgz#4e446bd9f85bd7e27d3e226f4e99af12011a4386"
@@ -1716,6 +1732,13 @@ Lockfile:
   core-util-is@1.0.2, core-util-is@~1.0.0:
     version "1.0.2"
     resolved "https://registry.yarnpkg.com/core-util-is/-/core-util-is-1.0.2.tgz#b5fd54220aa2bc5ab57aab7140c940754503c1a7"
+  
+  cors@^2.8.4:
+    version "2.8.4"
+    resolved "https://registry.yarnpkg.com/cors/-/cors-2.8.4.tgz#2bd381f2eb201020105cd50ea59da63090694686"
+    dependencies:
+      object-assign "^4"
+      vary "^1"
   
   cosmiconfig@^2.1.0, cosmiconfig@^2.1.1:
     version "2.2.2"
@@ -3858,13 +3881,17 @@ Lockfile:
     version "4.5.0"
     resolved "https://registry.yarnpkg.com/lodash.uniq/-/lodash.uniq-4.5.0.tgz#d0225373aeb652adc1bc82e4945339a842754773"
   
+  lodash@4.x, lodash@^4.13.1:
+    version "4.17.5"
+    resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.5.tgz#99a92d65c0272debe8c96b6057bc8fbfa3bed511"
+  
+  lodash@^2.4.2:
+    version "2.4.2"
+    resolved "https://registry.yarnpkg.com/lodash/-/lodash-2.4.2.tgz#fadd834b9683073da179b3eae6d9c0d15053f73e"
+  
   lodash@^4.0.0, lodash@^4.14.0, lodash@^4.17.2, lodash@^4.17.4, lodash@^4.2.0, lodash@^4.2.1, lodash@^4.3.0, lodash@^4.6.0, lodash@^4.6.1:
     version "4.17.4"
     resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.4.tgz#78203a4d1c328ae1d86dca6460e369b57f4055ae"
-  
-  lodash@^4.13.1:
-    version "4.17.5"
-    resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.5.tgz#99a92d65c0272debe8c96b6057bc8fbfa3bed511"
   
   loglevel@^1.4.1:
     version "1.6.0"
@@ -4154,6 +4181,13 @@ Lockfile:
     version "0.6.1"
     resolved "https://registry.yarnpkg.com/negotiator/-/negotiator-0.6.1.tgz#2b327184e8992101177b28563fb5e7102acd0ca9"
   
+  node-cache@^3.1.0:
+    version "3.2.1"
+    resolved "https://registry.yarnpkg.com/node-cache/-/node-cache-3.2.1.tgz#a7958d32a8a42d9119ce25986567ea2c5f966773"
+    dependencies:
+      clone "1.0.x"
+      lodash "4.x"
+  
   node-fetch@^1.0.1, node-fetch@^1.7.3:
     version "1.7.3"
     resolved "https://registry.yarnpkg.com/node-fetch/-/node-fetch-1.7.3.tgz#980f6f72d85211a5347c6b2bc18c5b84c3eb47ef"
@@ -4212,6 +4246,10 @@ Lockfile:
   node-watch@^0.5.8:
     version "0.5.8"
     resolved "https://registry.yarnpkg.com/node-watch/-/node-watch-0.5.8.tgz#208d10f93afe2f24b3701c254f54c7552f90c905"
+  
+  nodemailer@^4.6.4:
+    version "4.6.4"
+    resolved "https://registry.yarnpkg.com/nodemailer/-/nodemailer-4.6.4.tgz#f0d72d0c6a6ec5f4369fa8f4bf5127a31baa2014"
   
   nopt@^4.0.1:
     version "4.0.1"
@@ -4277,7 +4315,7 @@ Lockfile:
     version "0.8.2"
     resolved "https://registry.yarnpkg.com/oauth-sign/-/oauth-sign-0.8.2.tgz#46a6ab7f0aead8deae9ec0565780b7d4efeb9d43"
   
-  object-assign@^4.0.1, object-assign@^4.1.0, object-assign@^4.1.1:
+  object-assign@^4, object-assign@^4.0.1, object-assign@^4.1.0, object-assign@^4.1.1:
     version "4.1.1"
     resolved "https://registry.yarnpkg.com/object-assign/-/object-assign-4.1.1.tgz#2109adc7965887cfc05cbbd442cac8bfbb360863"
   
@@ -5522,6 +5560,10 @@ Lockfile:
     version "5.4.1"
     resolved "https://registry.yarnpkg.com/semver/-/semver-5.4.1.tgz#e059c09d8571f0540823733433505d3a2f00b18e"
   
+  semver@^5.1.0:
+    version "5.5.0"
+    resolved "https://registry.yarnpkg.com/semver/-/semver-5.5.0.tgz#dc4bbc7a6ca9d916dee5d43516f0092b58f7b8ab"
+  
   send@0.15.6:
     version "0.15.6"
     resolved "https://registry.yarnpkg.com/send/-/send-0.15.6.tgz#20f23a9c925b762ab82705fe2f9db252ace47e34"
@@ -5587,6 +5629,13 @@ Lockfile:
       escape-html "~1.0.3"
       parseurl "~1.3.2"
       send "0.16.1"
+  
+  session-memory-store@^0.2.2:
+    version "0.2.2"
+    resolved "https://registry.yarnpkg.com/session-memory-store/-/session-memory-store-0.2.2.tgz#d46438f284cf8e0ed1544f6fd5993ee1477c7656"
+    dependencies:
+      lodash "^2.4.2"
+      node-cache "^3.1.0"
   
   set-blocking@^2.0.0, set-blocking@~2.0.0:
     version "2.0.0"
@@ -5837,6 +5886,20 @@ Lockfile:
       nan "~2.7.0"
       node-pre-gyp "~0.6.38"
   
+  ssh2-streams@~0.2.0:
+    version "0.2.0"
+    resolved "https://registry.yarnpkg.com/ssh2-streams/-/ssh2-streams-0.2.0.tgz#cb4ccb6ead7ff02f013f429646394fda107519b3"
+    dependencies:
+      asn1 "~0.2.0"
+      semver "^5.1.0"
+      streamsearch "~0.1.2"
+  
+  ssh2@^0.6.0:
+    version "0.6.0"
+    resolved "https://registry.yarnpkg.com/ssh2/-/ssh2-0.6.0.tgz#e472f27dfeb1b5ad892d346135bdf7532734bb6a"
+    dependencies:
+      ssh2-streams "~0.2.0"
+  
   sshpk@^1.7.0:
     version "1.13.1"
     resolved "https://registry.yarnpkg.com/sshpk/-/sshpk-1.13.1.tgz#512df6da6287144316dc4c18fe1cf1d940739be3"
@@ -5898,6 +5961,10 @@ Lockfile:
       readable-stream "^2.2.6"
       to-arraybuffer "^1.0.0"
       xtend "^4.0.0"
+  
+  streamsearch@~0.1.2:
+    version "0.1.2"
+    resolved "https://registry.yarnpkg.com/streamsearch/-/streamsearch-0.1.2.tgz#808b9d0e56fc273d809ba57338e929919a1a9f1a"
   
   strict-uri-encode@^1.0.0:
     version "1.1.0"
@@ -6319,7 +6386,7 @@ Lockfile:
       spdx-correct "~1.0.0"
       spdx-expression-parse "~1.0.0"
   
-  vary@~1.1.1, vary@~1.1.2:
+  vary@^1, vary@~1.1.1, vary@~1.1.2:
     version "1.1.2"
     resolved "https://registry.yarnpkg.com/vary/-/vary-1.1.2.tgz#2299f02c6ded30d4a5961b0b9f74524a18f634fc"
   

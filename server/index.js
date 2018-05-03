@@ -12,6 +12,7 @@ const MemoryStore = require('session-memory-store')(session);
 const path = require('path');
 const morgan = require('morgan');
 const crypto = require('crypto');
+const cors = require('cors');
 
 const request = require('request-promise');
 const helpers = require('./helpers');
@@ -136,65 +137,102 @@ app.get('/', withShop, function(request, response) {
 
 app.use(bodyParser.urlencoded({ extended: true }));
 
+
+var corsOptions = {
+  methods: ['GET','POST','PUT'],
+  allowedHeaders: ['Content-Type', 'application/json']
+}
+
 // ---------------- DYNAMIC SHOPIFY APPLICATION PROXY REGISTRATION ----------------
 
-app.post('/ecommerce/spacelabs/register', helpers.middlewareHMACValidator, function(req ,res){
+app.post('/ecommerce/spacelabs/register', cors(corsOptions), helpers.middlewareHMACValidator, function(req ,res){
 
   var request_object = {
     domain: req.headers['x-forwarded-host'],
     response: req.body.contact
   };
 
-  helpers.environmentValidation(request_object).then(helpers.customerRecordCreation).then(helpers.shopifyCustomerPost).then(function(response) {
+  helpers.environmentValidation(request_object)
+  .then(helpers.customerRecordCreation)
+  .then(helpers.shopifyCustomerPost)
+  .then(helpers.customerFileCreation)
+  .then(function(response) {
 
     res.status(200).send({response: response.shopify_response});
-    helpers.customerFileCreation(response);
 
+    helpers.internalAuthentication(response)
+    .then(helpers.internalFilePost)
+    .then(function(response) {
+
+      console.log(response);
+      
+    },function(error) {
+  
+      console.log(error);
+
+    });
+  
   },function(error) {
 
     res.status(404).send(error);
-
   });
 });
 
 // ---------------- DYNAMIC SHOPIFY APPLICATION PROXY PRICING ----------------
 
-app.post('/ecommerce/spacelabs/pricing', helpers.middlewareHMACValidator, function(req ,res){
+app.post('/ecommerce/spacelabs/pricing', cors(corsOptions), helpers.middlewareHMACValidator, function(req ,res){
 
-  console.time("Transforming POST Data");
   var request_object = {
     domain: req.headers['x-forwarded-host'],
     response: req.body
   };
 
-  helpers.environmentValidation(request_object).then(helpers.MFGPricingGet).then(helpers.shopifyPricingPut).then(function(response) {
-    
-    console.timeEnd("POST Pricing to Shopify Admin");
+  helpers.environmentValidation(request_object)
+  .then(helpers.MFGPricingGet)
+  .then(helpers.shopifyPricingPut)
+  .then(function(response) {
+
     res.status(200).send({response: response.shopify_response});
 
   },function(error) {
+    
+    helpers.shopifyPricingPut(error).then(function(response) {
+
+      winston.error("POST " + response.environment + ": " + response.options.uri + " - Message: Failed to retrieve customer pricing from MFG Pro. Successfully updated Shopify customer with updated MFG Pro Bill-to, Ship-to and Sold-to codes.");
+
+    },function(error){
+
+      winston.error("POST " + response.environment + ": " + response.options.uri + " - Message: Failed to retrieve customer pricing from MFG Pro. Failed to update Shopify customer with updated MFG Pro Bill-to, Ship-to and Sold-to codes.");
+      res.status(403).send({error: error.message});
+
+    });
 
     res.status(403).send({error: error.message});
 
   });
 });
 
-// ---------------- DYNAMIC SHOPIFY WEBHOOK ORDER INTAKE ----------------
+// ---------------- DYNAMIC SHOPIFY WEBHOOK FTP ORDER CREATE ----------------
 
-app.post('/webhook/spacelabs/order', helpers.webhookParsingMiddleware, helpers.webhookHMACValidator, function(req ,res, next) {
+app.post('/webhook/spacelabs/order', cors(corsOptions), helpers.webhookParsingMiddleware, helpers.webhookHMACValidator, function(req ,res, next) {
 
   var request_object = {
     domain: req.headers['x-shopify-shop-domain'],
     response: req.body
   };
 
-  helpers.environmentValidation(request_object).then(helpers.orderFileCreation).then(function(response) {
+  helpers.environmentValidation(request_object)
+  .then(helpers.orderFileCreation)
+  .then(helpers.internalAuthentication)
+  .then(helpers.internalFilePost)
+  .then(function(response) {
 
+    console.log(response);
     res.sendStatus(200);
 
   },function(error) {
 
-    res.sendStatus(403);
+    res.sendStatus(200);
 
   });
 });
@@ -206,7 +244,13 @@ var watcher = chokidar.watch('./tmp/customer_verified/intake');
 watcher.on('ready', function() { 
     watcher.on('add', function(path) {
       
-      helpers.environmentFileValidation(path).then(helpers.environmentValidation).then(helpers.readCustomerIntakeFile).then(helpers.formatCustomerIntakeFile).then(helpers.shopifyCustomerPut).then(helpers.shopifyCustomerInvite).then(function (resolve) {
+      helpers.environmentFileValidation(path)
+      .then(helpers.environmentValidation)
+      .then(helpers.readCustomerIntakeFile)
+      .then(helpers.formatCustomerIntakeFile)
+      .then(helpers.shopifyCustomerPut)
+      .then(helpers.shopifyCustomerInvite)
+      .then(function (resolve) {
 
           helpers.customerIntakeProcessed(resolve);
 
