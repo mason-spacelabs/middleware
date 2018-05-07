@@ -163,12 +163,12 @@ app.post('/ecommerce/spacelabs/register', cors(corsOptions), helpers.middlewareH
     helpers.internalAuthentication(response)
     .then(helpers.internalFilePost)
     .then(function(response) {
-
-      console.log(response);
+      
+      console.log("Successful Registrating Cycle!");
       
     },function(error) {
   
-      console.log(error);
+      console.log("REGISTRATION ERROR!");
 
     });
   
@@ -198,11 +198,14 @@ app.post('/ecommerce/spacelabs/pricing', cors(corsOptions), helpers.middlewareHM
     
     helpers.shopifyPricingPut(error).then(function(response) {
 
-      winston.error("POST " + response.environment + ": " + response.options.uri + " - Message: Failed to retrieve customer pricing from MFG Pro. Successfully updated Shopify customer with updated MFG Pro Bill-to, Ship-to and Sold-to codes.");
+      var errorMessage = helpers.middlewareErrors(response.environment, "POST", response.options.uri, "Failed to retrieve customer pricing from MFG Pro. Successfully updated Shopify customer with updated MFG Pro Bill-to, Ship-to and Sold-to codes.");
+      winston.error(errorMessage);   
 
     },function(error){
 
-      winston.error("POST " + response.environment + ": " + response.options.uri + " - Message: Failed to retrieve customer pricing from MFG Pro. Failed to update Shopify customer with updated MFG Pro Bill-to, Ship-to and Sold-to codes.");
+      var errorMessage = helpers.middlewareErrors(response.environment, "POST", response.options.uri, "Failed to retrieve customer pricing from MFG Pro. Failed to update Shopify customer with updated MFG Pro Bill-to, Ship-to and Sold-to codes.");
+      winston.error(errorMessage);
+
       res.status(403).send({error: error.message});
 
     });
@@ -256,9 +259,18 @@ watcher.on('ready', function() {
 
         })
         .catch(function (error) {
-          
-          helpers.customerIntakeProcessed(error);
-      
+
+          var path_format = "./" + path.split("\\").join("/");
+
+          fs.unlink(path_format, function (err) {            
+            if (err) { 
+
+              var errorMessage = helpers.middlewareErrors(customer_object.environment, "DELETE/VALIDATION", "./tmp/customer_verified/intake", "Customer intake file cannot be removed from the INTAKE directory and the environment validation failed.");
+              winston.error(errorMessage);                                                
+                    
+            }                                                          
+           console.log('File environment could not be validated but it has been removed from intake folder!');                           
+          });   
         });
     });
 });
