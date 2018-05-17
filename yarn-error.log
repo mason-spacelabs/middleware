@@ -1,5 +1,5 @@
 Arguments: 
-  C:\Program Files\nodejs\node.exe C:\Program Files (x86)\Yarn\bin\yarn.js run dev
+  C:\Program Files\nodejs\node.exe C:\Program Files (x86)\Yarn\bin\yarn.js run prod
 
 PATH: 
   C:\ProgramData\Oracle\Java\javapath;C:\Program Files (x86)\Common Files\Intel\Shared Libraries\redist\ia32\mpirt;C:\Program Files (x86)\Common Files\Intel\Shared Libraries\redist\ia32\compiler;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\SWTOOLS\ReadyApps;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files (x86)\Attachmate\Reflection\;C:\Program Files (x86)\Shoreline Communications\ShoreWare Client\;C:\Program Files (x86)\Shoreline Communications\ShoreWare Client\win64;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files (x86)\Skype\Phone\;C:\Program Files\nodejs\;C:\Program Files\Git\cmd;C:\Program Files (x86)\Yarn\bin\;;C:\Program Files\Microsoft VS Code\bin;C:\Users\halstemx\AppData\Roaming\npm;C:\Program Files\Theme Kit\;C:\Users\halstemx\AppData\Local\Yarn\bin
@@ -19,6 +19,7 @@ npm manifest:
     "version": "0.0.0",
     "private": true,
     "scripts": {
+      "server":"ngrok http 3000",
       "prod": "yarn run clean && yarn run build && cross-env NODE_ENV=production yarn run start",
       "dev": "cross-env NODE_ENV=development yarn run start",
       "start": "node ./bin/www",
@@ -6659,8 +6660,8 @@ Trace:
   Error: Command failed.
   Exit code: 1
   Command: C:\Windows\system32\cmd.exe
-  Arguments: /d /s /c cross-env NODE_ENV=development yarn run start
-  Directory: C:\Users\halstemx\Desktop\Spacelabs\spacelabs-middleware
+  Arguments: /d /s /c yarn run clean && yarn run build && cross-env NODE_ENV=production yarn run start
+  Directory: C:\Users\halstemx\Desktop\Spacelabs\spacelabs-dev-middleware
   Output:
   
       at ProcessTermError.MessageError (C:\Program Files (x86)\Yarn\lib\cli.js:186:110)

@@ -27,7 +27,9 @@ const config = require('../config/webpack.config.js');
 
 const ShopifyAPIClient = require('shopify-api-node');
 const ShopifyExpress = require('@shopify/shopify-express');
-const {MemoryStrategy} = require('@shopify/shopify-express/strategies');
+const {
+  MemoryStrategy
+} = require('@shopify/shopify-express/strategies');
 
 const {
   SHOPIFY_APP_KEY,
@@ -43,14 +45,22 @@ const shopifyConfig = {
   scope: ['write_orders, read_orders, read_customers, write_customers, read_checkouts, write_checkouts'],
   shopStore: new MemoryStrategy(),
   afterAuth(request, response) {
-    const { session: { accessToken, shop } } = request;
+    const {
+      session: {
+        accessToken,
+        shop
+      }
+    } = request;
 
     return response.redirect('/');
   },
 };
 
-const registerWebhook = function(shopDomain, accessToken, webhook) {
-  const shopify = new ShopifyAPIClient({ shopName: shopDomain, accessToken: accessToken });
+const registerWebhook = function (shopDomain, accessToken, webhook) {
+  const shopify = new ShopifyAPIClient({
+    shopName: shopDomain,
+    accessToken: accessToken
+  });
   shopify.webhook.create(webhook).then(
     response => console.log(`webhook '${webhook.topic}' created`),
     err => console.log(`Error creating webhook '${webhook.topic}'. ${JSON.stringify(err.response.body)}`)
@@ -63,7 +73,9 @@ const isDevelopment = NODE_ENV;
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
 
-app.use(morgan('combined', { stream: winston.stream }));
+app.use(morgan('combined', {
+  stream: winston.stream
+}));
 app.use(cookieParser());
 app.use(
   session({
@@ -74,12 +86,12 @@ app.use(
   })
 );
 
-app.enable('trust proxy'); 
+app.enable('trust proxy');
 
 var apiLimiter = new RateLimit({
-  windowMs: 15*60*1000, 
+  windowMs: 15 * 60 * 1000,
   max: 100,
-  delayMs: 0 
+  delayMs: 0
 });
 
 app.use(apiLimiter);
@@ -116,15 +128,26 @@ app.get('/install', (req, res) => res.render('install'));
 const shopify = ShopifyExpress(shopifyConfig);
 
 // Mount Shopify Routes
-const {routes, middleware} = shopify;
-const {withShop, withWebhook} = middleware;
+const {
+  routes,
+  middleware
+} = shopify;
+const {
+  withShop,
+  withWebhook
+} = middleware;
 
 app.use('/', routes);
 
 // Client
-app.get('/', withShop, function(request, response) {
+app.get('/', withShop, function (request, response) {
 
-  const { session: { shop, accessToken } } = request;
+  const {
+    session: {
+      shop,
+      accessToken
+    }
+  } = request;
   response.render('app', {
     title: 'Shopify Node App',
     apiKey: shopifyConfig.apiKey,
@@ -135,157 +158,226 @@ app.get('/', withShop, function(request, response) {
 // ---------------- MIDDLEWARE INTEGRATION FOR ECOMMERCE SITES ----------------
 // ---------------- MIDDLEWARE INTEGRATION FOR ECOMMERCE SITES ----------------
 
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.urlencoded({
+  extended: true
+}));
 
 
 var corsOptions = {
-  methods: ['GET','POST','PUT'],
+  methods: ['GET', 'POST', 'PUT'],
   allowedHeaders: ['Content-Type', 'application/json']
 }
 
-// ---------------- DYNAMIC SHOPIFY APPLICATION PROXY REGISTRATION ----------------
+// ---------------- DYNAMIC SHOPIFY RESET CUSTOMER TAGS ----------------
 
-app.post('/ecommerce/spacelabs/register', cors(corsOptions), helpers.middlewareHMACValidator, function(req ,res){
+app.post('/ecommerce/spacelabs/customer', cors(corsOptions), helpers.middlewareHMACValidator, function (req, res) {
 
   var request_object = {
     domain: req.headers['x-forwarded-host'],
-    response: req.body.contact
+    response: req.body,
+    client_tags: "F" + req.body.ShopifyFacilityNumber + ", S" + req.body.ShopifyShippingNumber + ", B" + req.body.ShopifyBillingNumber
   };
 
   helpers.environmentValidation(request_object)
-  .then(helpers.customerRecordCreation)
-  .then(helpers.shopifyCustomerPost)
-  .then(helpers.customerFileCreation)
-  .then(function(response) {
+  .then(helpers.shopifyPricingPUT)
+  .then(function (response) {
 
-    res.status(200).send({response: response.shopify_response});
+    res.status(200).send();
 
-    helpers.internalAuthentication(response)
-    .then(helpers.internalFilePost)
-    .then(function(response) {
-      
-      console.log("Successful Registrating Cycle!");
-      
-    },function(error) {
-  
-      console.log("REGISTRATION ERROR!");
-
-    });
-  
-  },function(error) {
+  }, function (error) {
 
     res.status(404).send(error);
+
   });
 });
 
 // ---------------- DYNAMIC SHOPIFY APPLICATION PROXY PRICING ----------------
 
-app.post('/ecommerce/spacelabs/pricing', cors(corsOptions), helpers.middlewareHMACValidator, function(req ,res){
+app.post('/ecommerce/spacelabs/pricing', cors(corsOptions), helpers.middlewareHMACValidator, function (req, res) {
 
   var request_object = {
     domain: req.headers['x-forwarded-host'],
-    response: req.body
+    response: req.body,
+    internal: {
+      path: 'pricing',
+      error: 'Unable to authenticate for Pricing request.'
+    },
+    authentication: {
+      method: 'POST',
+      uri: process.env.MFG_PRO_NONCE_GENERATOR
+    }
+  };
+  
+  helpers.environmentValidation(request_object)
+    .then(helpers.internalAuthentication)
+    .then(helpers.internalAuthenticatedPOST)
+    .then(helpers.pricingObjectTransformation)
+    .then(helpers.shopifyPricingPUT)
+    .then(function (response) {
+
+      res.status(200).send({
+        response: 'success'
+      });
+
+    }, function (error) {
+
+      helpers.shopifyPricingPUT(error).then(function (response) {
+
+        var error_message = helpers.middlewareErrors(response.environment, "POST", "SHOPIFY PRICING PUT", "Failed to retrieve customer pricing from MFG Pro. Successfully updated Shopify customer with updated MFG Pro Bill-to, Ship-to and Sold-to codes.");
+        winston.error(error_message);
+
+      }, function (error) {
+
+        var error_message = helpers.middlewareErrors(response.environment, "POST", "SHOPIFY PRICING PUT", "Failed to retrieve customer pricing from MFG Pro. Failed to update Shopify customer with updated MFG Pro Bill-to, Ship-to and Sold-to codes.");
+        winston.error(error_message);
+
+        res.status(403).send({ error: error.error_message });
+
+      });
+
+      res.status(403).send({
+        error: error.error_message
+      });
+
+    });
+});
+
+// ---------------- DYNAMIC SHOPIFY APPLICATION PROXY REGISTRATION ----------------
+
+app.post('/ecommerce/spacelabs/register', cors(corsOptions), helpers.middlewareHMACValidator, function (req, res) {
+
+  var request_object = {
+    domain: req.headers['x-forwarded-host'],
+    response: req.body.contact,
+    internal: {
+      path: 'register',
+      error: 'Unable to authenticate for Customer Registration.'
+    },
+    authentication: {
+      method: 'POST',
+      uri: process.env.MFG_PRO_NONCE_GENERATOR
+    }
   };
 
   helpers.environmentValidation(request_object)
-  .then(helpers.MFGPricingGet)
-  .then(helpers.shopifyPricingPut)
-  .then(function(response) {
+    .then(helpers.internalAuthentication)
+    .then(helpers.customerRecordCreation)
+    .then(helpers.shopifyCustomerPOST)
+    .then(helpers.customerFileCreation)
+    .then(helpers.internalAuthenticatedPOST)
+    .then(function (response) {
 
-    res.status(200).send({response: response.shopify_response});
+      res.status(200).send({ response: response.shopify_response });
 
-  },function(error) {
-    
-    helpers.shopifyPricingPut(error).then(function(response) {
+      console.log("Successful Registrating Cycle!");
 
-      var errorMessage = helpers.middlewareErrors(response.environment, "POST", response.options.uri, "Failed to retrieve customer pricing from MFG Pro. Successfully updated Shopify customer with updated MFG Pro Bill-to, Ship-to and Sold-to codes.");
-      winston.error(errorMessage);   
+    }, function (error) {
 
-    },function(error){
-
-      var errorMessage = helpers.middlewareErrors(response.environment, "POST", response.options.uri, "Failed to retrieve customer pricing from MFG Pro. Failed to update Shopify customer with updated MFG Pro Bill-to, Ship-to and Sold-to codes.");
-      winston.error(errorMessage);
-
-      res.status(403).send({error: error.message});
+      res.status(404).send(error);
 
     });
-
-    res.status(403).send({error: error.message});
-
-  });
 });
+
 
 // ---------------- DYNAMIC SHOPIFY WEBHOOK FTP ORDER CREATE ----------------
 
-app.post('/webhook/spacelabs/order', cors(corsOptions), helpers.webhookParsingMiddleware, helpers.webhookHMACValidator, function(req ,res, next) {
-
+app.post('/webhook/spacelabs/order', cors(corsOptions), helpers.webhookParsingMiddleware, function(req, res, next) {
+  
   var request_object = {
     domain: req.headers['x-shopify-shop-domain'],
-    response: req.body
+    response: req.body,
+    rawbody: req.rawbody,
+    hmac: req.headers['x-shopify-hmac-sha256'],
+    client_api_webhook: '',
+    environment: '',
+    internal: {
+      path: 'order',
+      error: 'Unable to authenticate webhook orders.'
+    },
+    authentication: {
+      method: 'POST',
+      uri: process.env.MFG_PRO_NONCE_GENERATOR
+    }
   };
 
-  helpers.environmentValidation(request_object)
-  .then(helpers.orderFileCreation)
+  helpers.webhookHMACValidator(request_object)
   .then(helpers.internalAuthentication)
-  .then(helpers.internalFilePost)
+  .then(helpers.orderObjectCreation)
+  .then(helpers.internalAuthenticatedPOST)
   .then(function(response) {
 
-    console.log(response);
-    res.sendStatus(200);
+ res.sendStatus(200);
 
+    console.log("Successfully sent order!");
+  
   },function(error) {
 
-    res.sendStatus(200);
+  res.sendStatus(200);
+
+  console.log("Failed to send order");
 
   });
 });
 
-// ---------------- MIDDLEWARE CUSTOMER VERIFICATION SHOPIFY POST AND INVITE ----------------
+// ---------------- MFG PRO CUSTOMER VERIFIED AND INVITE ----------------
 
-var watcher = chokidar.watch('./tmp/customer_verified/intake');
+function internalCustomerVerified() {
 
-watcher.on('ready', function() { 
-    watcher.on('add', function(path) {
-      
-      helpers.environmentFileValidation(path)
-      .then(helpers.environmentValidation)
-      .then(helpers.readCustomerIntakeFile)
-      .then(helpers.formatCustomerIntakeFile)
-      .then(helpers.shopifyCustomerPut)
-      .then(helpers.shopifyCustomerInvite)
-      .then(function (resolve) {
+  var request_object = {
+    domain: '',
+    internal: {
+      path: 'invite',
+      error: 'Unable to authenticate webhook orders.'
+    },
+    authentication: {
+      method: 'POST',
+      uri: process.env.MFG_PRO_NONCE_GENERATOR
+    }
+  };
 
-          helpers.customerIntakeProcessed(resolve);
+  helpers.environmentValidation(request_object)
+    .then(helpers.internalAuthentication)
+    .then(helpers.internalAuthenticatedPOST)
+    .then(function (response) {
 
-        })
-        .catch(function (error) {
+      var internal_response = JSON.parse(response.internal_response);
+      var intake_array = "";
+      var file_content = "";
 
-          var path_format = "./" + path.split("\\").join("/");
+      request_object.file_array = [];
 
-          fs.unlink(path_format, function (err) {            
-            if (err) { 
+      for (let items in internal_response.Files) {
 
-              var errorMessage = helpers.middlewareErrors(customer_object.environment, "DELETE/VALIDATION", "./tmp/customer_verified/intake", "Customer intake file cannot be removed from the INTAKE directory and the environment validation failed.");
-              winston.error(errorMessage);                                                
-                    
-            }                                                          
-           console.log('File environment could not be validated but it has been removed from intake folder!');                           
-          });   
+        intake_array = internal_response.Files[items].Contents.split('|');
+        file_content = helpers.fileObjectCreation(intake_array);
+        request_object.file_array.push(file_content);
+
+      }
+      helpers.PostCustomerUpdates(request_object)
+        .then(function (response) {
+          console.log("Successfully checked registration files or sent invite!");
+        }, function (error) {
+          console.log("Error sending invite");
         });
+
+    }, function (error) {
+
     });
-});
+};
+
+setInterval(function(){ internalCustomerVerified(); }, 1000 * 60 * 2);
 
 // -------------------------------- END --------------------------------
 // -------------------------------- END --------------------------------
 
 // Error Handlers
-app.use(function(req, res, next) {
+app.use(function (req, res, next) {
   const error = new Error('Not Found');
   error.status = 404;
   next(error);
 });
 
-app.use(function(error, request, response, next) {
+app.use(function (error, request, response, next) {
   response.locals.message = error.message;
   response.locals.error = request.app.get('env') === 'development' ? error : {};
 
