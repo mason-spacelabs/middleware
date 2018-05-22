@@ -10,6 +10,29 @@ const crypto = require('crypto');
 const winston = require('./winston');
 const md5 = require('md5');
 
+// ---------------- MIDDLEWARE INTEGRATION ROUTE ENVIRONMENT VARIABLES - PROCESS ENVIRONMENT DEV/PRODUCTION ----------------
+
+const environment_routes = process.env.NODE_ENV === "production" ? 
+{
+  MFG_PRO_NONCE_GENERATOR: process.env.MFG_PRO_PROD_NONCE_GENERATOR,
+  MFG_PRO_PRICING: process.env.MFG_PRO_PROD_PRICING,
+  MFG_PRO_FILE_PUT: process.env.MFG_PRO_PROD_FILE_PUT,
+  MFG_PRO_FILE_GET: process.env.MFG_PRO_PROD_FILE_GET,
+  MFG_PRO_INTERNAL_ACCOUNT: process.env.MFG_PRO_PROD_INTERNAL_ACCOUNT,
+  MFG_PRO_INTERNAL_PASSWORD: process.env.MFG_PRO_PROD_INTERNAL_PASSWORD
+}
+: 
+{
+  MFG_PRO_NONCE_GENERATOR: process.env.MFG_PRO_TEST_NONCE_GENERATOR,
+  MFG_PRO_PRICING: process.env.MFG_PRO_TEST_PRICING,
+  MFG_PRO_FILE_PUT: process.env.MFG_PRO_TEST_FILE_PUT,
+  MFG_PRO_FILE_GET: process.env.MFG_PRO_TEST_FILE_GET,
+  MFG_PRO_INTERNAL_ACCOUNT: process.env.MFG_PRO_TEST_INTERNAL_ACCOUNT,
+  MFG_PRO_INTERNAL_PASSWORD: process.env.MFG_PRO_TEST_INTERNAL_PASSWORD
+}
+
+// ---------------- MIDDLEWARE INTEGRATION ERROR FUNCTION - WINSTON ERROR FORMAT ----------------
+
 function middlewareErrors(environment, error_type, domain, message) {
 
   var middleware_errors = environment + " " + error_type + " - " + domain + " - " + "Message: " + message;
@@ -93,22 +116,22 @@ var environmentValidation = function (request_object) {
 function internalAuthentication(request_object) {
 
   var promise = new Promise(function (resolve, reject) {
-
+    
     request(request_object.authentication).then(function (response) {
-
+        
         var responseString = JSON.parse(response);
         var responseObject = JSON.parse(responseString);
         var authentication = responseObject[0].Pwd;
-        var hashString = authentication += process.env.MFG_PRO_INTERNAL_PASSWORD;
+        var hashString = authentication += environment_routes.MFG_PRO_INTERNAL_PASSWORD;
         var cryptoHash = md5(hashString);
         
         switch (request_object.internal.path) {
           case 'pricing':
             request_object.internal_options = {
               method: 'POST',
-              uri: process.env.MFG_PRO_PRICING,
+              uri: environment_routes.MFG_PRO_PRICING,
               body: {
-                Account: process.env.MFG_PRO_INTERNAL_ACCOUNT,
+                Account: environment_routes.MFG_PRO_INTERNAL_ACCOUNT,
                 TokenId: responseObject[0].id,
                 AuthString: cryptoHash,
                 QueryString: 'openagent&USA&' + request_object.response.RequestString,
@@ -121,9 +144,9 @@ function internalAuthentication(request_object) {
           case 'register':
             request_object.internal_options = {
               method: 'POST',
-              uri: process.env.MFG_PRO_FILE_PUT,
+              uri: environment_routes.MFG_PRO_FILE_PUT,
               body: {
-                Account: process.env.MFG_PRO_INTERNAL_ACCOUNT,
+                Account: environment_routes.MFG_PRO_INTERNAL_ACCOUNT,
                 TokenId: responseObject[0].id,
                 AuthString: cryptoHash,
                 FileDir: 'custreq',
@@ -138,7 +161,7 @@ function internalAuthentication(request_object) {
           case 'order':
             request_object.internal_options = {
               method: 'POST',
-              uri: process.env.MFG_PRO_FILE_PUT + "?Account=" + process.env.MFG_PRO_INTERNAL_ACCOUNT + "&TokenId=" + responseObject[0].id + "&AuthString=" + cryptoHash + "&FileDir=so" + "&FileName=",
+              uri: environment_routes.MFG_PRO_FILE_PUT + "?Account=" + environment_routes.MFG_PRO_INTERNAL_ACCOUNT + "&TokenId=" + responseObject[0].id + "&AuthString=" + cryptoHash + "&FileDir=so" + "&FileName=", // Adding file data as a parameter in the next promise
               json: true
             }
             resolve(request_object);
@@ -147,9 +170,9 @@ function internalAuthentication(request_object) {
             case 'invite':
             request_object.internal_options = {
               method: 'POST',
-              uri: process.env.MFG_PRO_FILE_GET,
+              uri: environment_routes.MFG_PRO_FILE_GET,
               body: {
-                Account: process.env.MFG_PRO_INTERNAL_ACCOUNT,
+                Account: environment_routes.MFG_PRO_INTERNAL_ACCOUNT,
                 TokenId: responseObject[0].id,
                 AuthString: cryptoHash,
                 FileDir: 'cust',
@@ -163,7 +186,7 @@ function internalAuthentication(request_object) {
           default:
             request_object.error_message = middlewareErrors("*ALL*", "VALIDATION", request_object.domain, "Unable to verify authenticated post route.");
             winston.error(request_object.error_message);
-            reject(request_object);
+            reject();
         }
       })
       .catch(function (error) {
@@ -171,19 +194,19 @@ function internalAuthentication(request_object) {
         var error_message = "Failed to get authentication from internal key generation. " + request_object.internal.error;
         request_object.error_message = middlewareErrors(request_object.environment, "MFG PRO INTERNAL AUTHENTICATION", "/ERP/NonceGenerator", error_message);
         winston.error(request_object.error_message);
-        reject(request_object);
+        reject();
 
       });
   });
   return promise;
 };
 
-// ---------------- MIDDLEWARE INTEGRATION SHOPIFY CUSTOMER INTAKE PUT - SHOPIFY PUT API CALL ----------------
+// ---------------- MIDDLEWARE INTEGRATION MFG PRO AUTHENTICATED POST - INTERNAL API POST ----------------
 
 function internalAuthenticatedPOST(request_object) {
 
   var promise = new Promise(function (resolve, reject) {
-
+  
     request(request_object.internal_options).then(function (response) {
 
         request_object.internal_response = response;
@@ -202,7 +225,7 @@ function internalAuthenticatedPOST(request_object) {
   return promise;
 };
 
-// ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/PRICING - MFG PRICING REQUEST ----------------
+// ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/PRICING - SHOPIFY PRICING OBJECT TRANSFORM ----------------
 
 function pricingObjectTransformation(request_object) {
 
@@ -270,7 +293,7 @@ function pricingObjectTransformation(request_object) {
   return promise;
 }
 
-// ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/PRICING - SHOPIFY PRICING POST ----------------
+// ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/PRICING - SHOPIFY PRICING PUT ----------------
 
 function shopifyPricingPUT(request_object) {
   
@@ -312,7 +335,7 @@ function shopifyPricingPUT(request_object) {
   return promise;
 }
 
-// ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/REGISTER - CUSTOMER RECORD  ----------------
+// ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/REGISTER - SHOPIFY CUSTOMER RECORD POST  ----------------
 
 function customerRecordCreation(request_object) {
 
@@ -417,6 +440,33 @@ function shopifyCustomerPOST(request_object) {
         var errorMessage = middlewareErrors(request_object.environment, "SHOPIFY POST ROUTE", request_object.domain, message);
         winston.error(errorMessage);
 
+        reject({error: error.response.body});
+
+      });
+  });
+  return promise;
+}
+
+// ---------------- MIDDLEWARE INTEGRATION ROUTE ECOMMERCE/REGISTER - CUSTOMER SHOPIFY DEFAULT ADDRESS POST  ----------------
+
+function shopifyAddressPUT(request_object) {
+
+  request_object.shopify_address_options = {
+    method: 'PUT',
+    uri: 'https://' + request_object.client_api_key + ':' + request_object.client_api_password + '@' + request_object.domain + '/admin/customers/' + request_object.shopify_response.Customer + '/addresses/' + request_object.shopify_response.Shipping_Address + '/default.json',
+  };
+
+  var promise = new Promise(function (resolve, reject) {
+
+    request(request_object.shopify_address_options).then(function (response) {
+        resolve(request_object);
+      })
+      .catch(function (error) {
+
+        var message = JSON.stringify(error.response.body);
+        var errorMessage = middlewareErrors(request_object.environment, "SHOPIFY ADDRESS PUT ROUTE", request_object.domain, message);
+        winston.error(errorMessage);
+
         reject({
           error: error.response.body
         });
@@ -471,7 +521,7 @@ function customerFileCreation(request_object) {
   return promise;
 }
 
-// ---------------- MIDDLEWARE INTEGRATION ROUTE WEBHOOK/ORDERS - MFG PRO ORDER INTAKE FILE ----------------
+// ---------------- MIDDLEWARE INTEGRATION ROUTE WEBHOOK/ORDERS - MFG PRO ORDER OBJECT CREATION ----------------
 
 function orderObjectCreation(request_object) {
 
@@ -494,25 +544,52 @@ function orderObjectCreation(request_object) {
       var shipping_number = tagsArray.pop().slice(1, 15);
       var facility_number = tagsArray.pop().slice(1, 15);
       var billing_number = tagsArray.pop().slice(1, 15);
-      var order_paid = "order paid";
-      var shipping_carrier = "N/A";
-      var attention_note = "N/A";
 
-      var purchase_order = request_object.response.name + "_" + order_date;
+      var order_paid = "order paid";
+      var custom_shipper = "";
+      var attention_note = "";
+      var shipping_carrier = "";
+      var shipping_carrier_number = "";
+      var purchase_order = "";
+      var shopify_order = "";
 
       for(var notes in request_object.response.note_attributes){
         switch (request_object.response.note_attributes[notes].name) {
           case "purchase_order":
-            purchase_order = request_object.response.note_attributes[notes].value.trim();
+
+            if(request_object.response.note_attributes[notes].value == "none"){
+              purchase_order = request_object.response.name;
+            }else{
+              purchase_order = request_object.response.note_attributes[notes].value.trim();
+            }
+
             break;
           case "shipping_name":
-            shipping_carrier = request_object.response.note_attributes[notes].value + ": ";
+
+            if(request_object.response.note_attributes[notes].value == "none"){
+              shipping_carrier = " ";
+            }else{
+              shipping_carrier = request_object.response.note_attributes[notes].value.trim() + " : ";
+            }
+
             break;
           case "shipping_number":
-          shipping_carrier += request_object.response.note_attributes[notes].value;
+            
+            if(request_object.response.note_attributes[notes].value == "none"){
+              shipping_carrier_number = " ";
+            }else{
+              shipping_carrier_number = request_object.response.note_attributes[notes].value.trim();
+            }
+
             break;
           case "attention":
-          attention_note = request_object.response.note_attributes[notes].value;
+
+            if(request_object.response.note_attributes[notes].value == "none"){
+              attention_note = " ";
+            }else{
+              attention_note = request_object.response.note_attributes[notes].value.trim();
+            }
+
             break;
           default:
         }
@@ -538,6 +615,9 @@ function orderObjectCreation(request_object) {
         default:
           shipping_method = "FEDEX99";
       }
+
+      customer_shipper = shipping_carrier + shipping_carrier_number;
+      
       var order_header = {
         "Row ID": "H",
         "MFG Pro Sold-to": facility_number,
@@ -556,7 +636,7 @@ function orderObjectCreation(request_object) {
         "Customer Paid": order_paid,
         "Attention to:": attention_note,
         "Shopify Order Number": request_object.response.name,
-        "Shipping Carrier Details": shipping_carrier,
+        "Shipping Carrier Details": customer_shipper
       };
 
       for (var header in order_header) {
@@ -605,10 +685,8 @@ function orderObjectCreation(request_object) {
 
       }
 
-
       request_object.internal_options.uri += order_date + "_" + request_object.response.name;
       request_object.internal_options.uri += "&FileData=" + completed_order.replace(/\s/g, "%20");
-
       resolve(request_object);
     } catch (error) {
 
@@ -631,6 +709,21 @@ function addDays(date, days) {
   result.setDate(result.getDate() + days);
   return result;
 
+}
+
+// ---------------- MIDDLEWARE INTEGRATION ROUTE CUSTOMER INTAKE - NORMALIZE PHONE NUMBERS ----------------
+
+function normalizePhoneNumbers(phone) {
+  //normalize string and remove all unnecessary characters
+  phone = phone.replace(/[^\d]/g, "");
+
+  //check if number length equals to 10
+  if (phone.length == 10) {
+      //reformat and return phone number
+      return phone.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3");
+  }
+
+  return null;
 }
 
 // ---------------- MIDDLEWARE INTEGRATION ROUTE WEBHOOK/ORDERS - HMAC VALIDATION FROM SHOPIFY ----------------
@@ -670,41 +763,6 @@ function webhookHMACValidator(request_object) {
   return promise;
 }
 
-// ---------------- MIDDLEWARE INTEGRATION CUSTOMER INTAKE VERIFIED - MFG PRO PARSE FILE TO OBJECT ----------------
-
-var customerIntakeProcessed = function (customer_object) {
-
-  var promise = new Promise(function (resolve, reject) {
-
-    if (customer_object.shopify_response.errors) {
-
-      fs.unlink(customer_object.response, function (error) {
-        if (error) {
-          var errorMessage = middlewareErrors(customer_object.environment, "MFG PRO UPLOAD/DELETE INTAKE FILE", "/tmp/customer_verified/intake", "Customer intake file cannot be removed from the INTAKE directory and could not be uploaded to Shopify.");
-          winston.error(errorMessage);
-        }
-
-        console.log('File has ERROR but has been removed from intake folder!');
-
-      });
-
-    } else {
-      fs.unlink(customer_object.response, function (err) {
-        if (err) {
-
-          var errorMessage = middlewareErrors(customer_object.environment, "MFG PRO DELETE INTAKE FILE", "/tmp/customer_verified/intake", "Customer intake file cannot be removed from the INTAKE directory.");
-          winston.error(errorMessage);
-
-        }
-
-        console.log('File has been processed and removed from intake folder!');
-
-      });
-    }
-  });
-  return promise;
-};
-
 // ---------------- MIDDLEWARE INTEGRATION CUSTOMER INTAKE VERIFIED - PARSE OBJECT FOR SHOPIFY PUT ----------------
 
 var formatCustomerIntakeFile = function (customer_object) {
@@ -726,6 +784,21 @@ var formatCustomerIntakeFile = function (customer_object) {
       company_billing = customer_object.intake_object[8] + " (Billing)";
       company_facility = customer_object.intake_object[19] + " (Facility)";
     }
+
+    var billing_phone_number = customer_object.intake_object[12].trim();
+    var shipping_phone_number = customer_object.intake_object[34].trim();
+    var facility_phone_number = customer_object.intake_object[23].trim();
+
+    if(billing_phone_number){
+      billing_phone_number = normalizePhoneNumbers(billing_phone_number);
+    }
+    if(shipping_phone_number){
+      shipping_phone_number = normalizePhoneNumbers(shipping_phone_number);
+    }
+    if(facility_phone_number){
+      facility_phone_number = normalizePhoneNumbers(facility_phone_number);
+    }
+    
     try { 
       customer_object.options = {
         method: 'PUT',
@@ -745,7 +818,7 @@ var formatCustomerIntakeFile = function (customer_object) {
                 "address1": customer_object.intake_object[9],
                 "city": customer_object.intake_object[10],
                 "province": customer_object.intake_object[11],
-                "phone": customer_object.intake_object[12],
+                "phone": billing_phone_number,
                 "zip": customer_object.intake_object[13],
                 "first_name": customer_object.intake_object[2],
                 "last_name": customer_object.intake_object[3],
@@ -757,7 +830,7 @@ var formatCustomerIntakeFile = function (customer_object) {
                 "address1": customer_object.intake_object[20],
                 "city": customer_object.intake_object[21],
                 "province": customer_object.intake_object[22],
-                "phone": customer_object.intake_object[23],
+                "phone": facility_phone_number,
                 "zip": customer_object.intake_object[24],
                 "first_name": customer_object.intake_object[2],
                 "last_name": customer_object.intake_object[3],
@@ -769,7 +842,7 @@ var formatCustomerIntakeFile = function (customer_object) {
                 "address1": customer_object.intake_object[31],
                 "city": customer_object.intake_object[32],
                 "province": customer_object.intake_object[33],
-                "phone": customer_object.intake_object[34],
+                "phone": shipping_phone_number,
                 "zip": customer_object.intake_object[35],
                 "first_name": customer_object.intake_object[2],
                 "last_name": customer_object.intake_object[3],
@@ -800,13 +873,14 @@ var formatCustomerIntakeFile = function (customer_object) {
 
 // ---------------- MIDDLEWARE INTEGRATION SHOPIFY CUSTOMER INTAKE PUT - SHOPIFY PUT API CALL ----------------
 
-function shopifyCustomerPut(customer_object) {
+function shopifyCustomerPUT(customer_object) {
 
   var promise = new Promise(function (resolve, reject) {
 
     request(customer_object.options).then(function (body) {
 
         customer_object.shopify_response = body;
+        console.log(customer_object.shopify_response);
         resolve(customer_object);
 
       })
@@ -881,7 +955,7 @@ var PostCustomerUpdates = async function (request_object) {
 
     request_object.intake_object = file;
     request_object = await formatCustomerIntakeFile(request_object);
-    request_object = await shopifyCustomerPut(request_object);
+    request_object = await shopifyCustomerPUT(request_object);
     request_object = await shopifyCustomerInvite(request_object);
     response.push(request_object);
 
@@ -893,22 +967,37 @@ var PostCustomerUpdates = async function (request_object) {
 // -------------------------------- END --------------------------------
 // -------------------------------- END --------------------------------
 
-module.exports.environmentValidation = environmentValidation;
+
+// -------------------------------- MIDDLEWARE FUNCTION --------------------------------
+
 module.exports.middlewareHMACValidator = middlewareHMACValidator;
 module.exports.webhookHMACValidator = webhookHMACValidator;
 module.exports.webhookParsingMiddleware = webhookParsingMiddleware;
+
+// -------------------------------- GLOBAL FUNCTION --------------------------------
+
 module.exports.middlewareErrors = middlewareErrors;
+module.exports.environmentValidation = environmentValidation;
+module.exports.fileObjectCreation = fileObjectCreation; 
+
+// -------------------------------- INTERNAL ROUTE --------------------------------
+
+module.exports.internalAuthentication = internalAuthentication;
 module.exports.internalAuthenticatedPOST = internalAuthenticatedPOST;
-module.exports.customerRecordCreation = customerRecordCreation;
-module.exports.shopifyCustomerPOST = shopifyCustomerPOST;
 module.exports.customerFileCreation = customerFileCreation;
 module.exports.PostCustomerUpdates = PostCustomerUpdates;
+
+// -------------------------------- SHOPIFY REGISTRATION ROUTE --------------------------------
+
+module.exports.customerRecordCreation = customerRecordCreation;
+module.exports.shopifyCustomerPOST = shopifyCustomerPOST;
+module.exports.shopifyAddressPUT = shopifyAddressPUT;
+
+// -------------------------------- SHOPIFY ORDER INTAKE ROUTE --------------------------------
+
 module.exports.orderObjectCreation = orderObjectCreation;
-module.exports.internalAuthentication = internalAuthentication;
-module.exports.fileObjectCreation = fileObjectCreation; 
+
+// -------------------------------- SHOPIFY PRICNG ROUTE --------------------------------
+
 module.exports.pricingObjectTransformation = pricingObjectTransformation;
 module.exports.shopifyPricingPUT = shopifyPricingPUT;
-module.exports.formatCustomerIntakeFile = formatCustomerIntakeFile;
-module.exports.shopifyCustomerPut = shopifyCustomerPut;
-module.exports.shopifyCustomerInvite = shopifyCustomerInvite;
-module.exports.customerIntakeProcessed = customerIntakeProcessed;

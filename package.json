@@ -3,14 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "server":"ngrok http 3000",
-    "prod": "yarn run clean && yarn run build && cross-env NODE_ENV=production yarn run start",
-    "dev": "cross-env NODE_ENV=development yarn run start",
+    "server": "ngrok http 3000",
+    "prod": "npm run clean && npm run build && cross-env NODE_ENV=production npm run start",
+    "dev": "cross-env NODE_ENV=development npm run start",
     "start": "node ./bin/www",
     "build": "cross-env NODE_ENV=production webpack --config ./config/webpack.config.js --progress --profile --colors",
     "clean": "rimraf -rf ./assets && mkdir assets",
     "pretty": "prettier --single-quote --trailing-comma es5 --write {client,bin,config,server}{/*,/**/*}.js",
-    "precommit": "yarn run pretty"
+    "precommit": "npm run pretty"
   },
   "engines": {
     "node": ">= 8.1.0"

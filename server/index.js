@@ -31,12 +31,10 @@ const {
   MemoryStrategy
 } = require('@shopify/shopify-express/strategies');
 
-const {
-  SHOPIFY_APP_KEY,
-  SHOPIFY_APP_HOST,
-  SHOPIFY_APP_SECRET,
-  NODE_ENV,
-} = process.env;
+const NODE_ENV = process.env.NODE_ENV;
+const SHOPIFY_APP_KEY = process.env.SHOPIFY_APP_KEY;
+const SHOPIFY_APP_SECRET = process.env.SHOPIFY_APP_SECRET;
+const SHOPIFY_APP_HOST = process.env.NODE_ENV === "production" ? process.env.SHOPIFY_PROD_APP_HOST : process.env.SHOPIFY_TEST_APP_HOST;
 
 const shopifyConfig = {
   host: SHOPIFY_APP_HOST,
@@ -200,11 +198,11 @@ app.post('/ecommerce/spacelabs/pricing', cors(corsOptions), helpers.middlewareHM
     response: req.body,
     internal: {
       path: 'pricing',
-      error: 'Unable to authenticate for Pricing request.'
+      error: 'Unable to authenticate for pricing request.'
     },
     authentication: {
       method: 'POST',
-      uri: process.env.MFG_PRO_NONCE_GENERATOR
+      uri: process.env.NODE_ENV === "production" ? process.env.MFG_PRO_PROD_NONCE_GENERATOR : process.env.MFG_PRO_TEST_NONCE_GENERATOR,
     }
   };
   
@@ -215,9 +213,7 @@ app.post('/ecommerce/spacelabs/pricing', cors(corsOptions), helpers.middlewareHM
     .then(helpers.shopifyPricingPUT)
     .then(function (response) {
 
-      res.status(200).send({
-        response: 'success'
-      });
+      res.status(200).send({ response: 'success' });
 
     }, function (error) {
 
@@ -251,11 +247,11 @@ app.post('/ecommerce/spacelabs/register', cors(corsOptions), helpers.middlewareH
     response: req.body.contact,
     internal: {
       path: 'register',
-      error: 'Unable to authenticate for Customer Registration.'
+      error: 'Unable to authenticate for customer registration.'
     },
     authentication: {
       method: 'POST',
-      uri: process.env.MFG_PRO_NONCE_GENERATOR
+      uri: process.env.NODE_ENV === "production" ? process.env.MFG_PRO_PROD_NONCE_GENERATOR : process.env.MFG_PRO_TEST_NONCE_GENERATOR,
     }
   };
 
@@ -263,6 +259,7 @@ app.post('/ecommerce/spacelabs/register', cors(corsOptions), helpers.middlewareH
     .then(helpers.internalAuthentication)
     .then(helpers.customerRecordCreation)
     .then(helpers.shopifyCustomerPOST)
+    .then(helpers.shopifyAddressPUT)
     .then(helpers.customerFileCreation)
     .then(helpers.internalAuthenticatedPOST)
     .then(function (response) {
@@ -282,7 +279,7 @@ app.post('/ecommerce/spacelabs/register', cors(corsOptions), helpers.middlewareH
 // ---------------- DYNAMIC SHOPIFY WEBHOOK FTP ORDER CREATE ----------------
 
 app.post('/webhook/spacelabs/order', cors(corsOptions), helpers.webhookParsingMiddleware, function(req, res, next) {
-  
+
   var request_object = {
     domain: req.headers['x-shopify-shop-domain'],
     response: req.body,
@@ -296,7 +293,7 @@ app.post('/webhook/spacelabs/order', cors(corsOptions), helpers.webhookParsingMi
     },
     authentication: {
       method: 'POST',
-      uri: process.env.MFG_PRO_NONCE_GENERATOR
+      uri: process.env.NODE_ENV === "production" ? process.env.MFG_PRO_PROD_NONCE_GENERATOR : process.env.MFG_PRO_TEST_NONCE_GENERATOR,
     }
   };
 
@@ -327,11 +324,11 @@ function internalCustomerVerified() {
     domain: '',
     internal: {
       path: 'invite',
-      error: 'Unable to authenticate webhook orders.'
+      error: 'Unable to authenticate internal path for verifed customer creation.'
     },
     authentication: {
       method: 'POST',
-      uri: process.env.MFG_PRO_NONCE_GENERATOR
+      uri: process.env.NODE_ENV === "production" ? process.env.MFG_PRO_PROD_NONCE_GENERATOR : process.env.MFG_PRO_TEST_NONCE_GENERATOR,
     }
   };
 
@@ -365,6 +362,8 @@ function internalCustomerVerified() {
     });
 };
 
+// ---------------- MFG PRO SET INTERVAL CUSTOMER VERIFIED AND INVITE ----------------
+
 setInterval(function(){ internalCustomerVerified(); }, 1000 * 60 * 2);
 
 // -------------------------------- END --------------------------------
@@ -372,7 +371,8 @@ setInterval(function(){ internalCustomerVerified(); }, 1000 * 60 * 2);
 
 // Error Handlers
 app.use(function (req, res, next) {
-  const error = new Error('Not Found');
+  console.log(req);
+  const error = new Error('Spacelabs Healthcare Not Found');
   error.status = 404;
   next(error);
 });
