@@ -68,9 +68,7 @@ function middlewareHMACValidator(req, res, next) {
 
     var errorMessage = middlewareErrors("*", "SHOPIFY VALIDATION", "ecommerce/spacelabs/pricing", "HMAC validation failed to connect to Shopify Server.");
     winston.error(errorMessage);
-    return res.status(403).send({
-      response: "HMAC Validation Failed"
-    });
+    return res.status(403).send({ response: "<h3 class='error-title'>403 Error - Spacelabs Healthcare</h3><p>Unable to authenticate request to our internal gateway. Please contact customer service at 1-800-522-7025 (Option 1) if the problem continues.</p>"});
 
   }
   next();
@@ -102,8 +100,17 @@ var environmentValidation = function (request_object) {
 
     } else {
 
-      request_object.error_message = middlewareErrors("*ALL*", "VALIDATION", request_object.domain, "Unable to validate ecommerce environment.");
-      winston.error(request_object.error_message);
+      if(!request_object.error){  
+
+        request_object.error = {
+          winston: middlewareErrors("*ALL*", "VALIDATION", request_object.domain, "Unable to validate ecommerce environment."),
+          code: 422,
+          response: "Process environment authentication failure"
+        };
+        winston.error(request_object.error.winston);
+
+      }
+
       reject(request_object);
 
     }
@@ -134,7 +141,7 @@ function internalAuthentication(request_object) {
                 Account: environment_routes.MFG_PRO_INTERNAL_ACCOUNT,
                 TokenId: responseObject[0].id,
                 AuthString: cryptoHash,
-                QueryString: 'openagent&USA&' + request_object.response.RequestString,
+                QueryString: 'openagent&USA&' + request_object.response.RequestString.slice(0, -1),
               },
               json: true
             }
@@ -184,17 +191,36 @@ function internalAuthentication(request_object) {
             break;
 
           default:
-            request_object.error_message = middlewareErrors("*ALL*", "VALIDATION", request_object.domain, "Unable to verify authenticated post route.");
-            winston.error(request_object.error_message);
-            reject();
+
+            if(!request_object.error){  
+
+              request_object.error = {
+                winston: middlewareErrors("*ALL*", "VALIDATION", request_object.domain, "Unable to verify authenticated post route."),
+                code: 400,
+                response: "Unable to authenticate POST route"
+              };
+              winston.error(request_object.error.winston);
+      
+            }
+      
+            reject(request_object);
         }
       })
       .catch(function (error) {
 
-        var error_message = "Failed to get authentication from internal key generation. " + request_object.internal.error;
-        request_object.error_message = middlewareErrors(request_object.environment, "MFG PRO INTERNAL AUTHENTICATION", "/ERP/NonceGenerator", error_message);
-        winston.error(request_object.error_message);
-        reject();
+        if(!request_object.error){  
+
+          request_object.error = {
+            winston: middlewareErrors(request_object.environment, "MFG PRO INTERNAL AUTHENTICATION", "/ERP/NonceGenerator", "Failed to get a response from internal key generation."),
+            code: 503,
+            response: "MFG Pro service unavailable"
+          };
+
+          winston.error(request_object.error.winston);
+  
+        }
+  
+        reject(request_object);
 
       });
   });
@@ -206,19 +232,28 @@ function internalAuthentication(request_object) {
 function internalAuthenticatedPOST(request_object) {
 
   var promise = new Promise(function (resolve, reject) {
-  
+    
     request(request_object.internal_options).then(function (response) {
-
+      
         request_object.internal_response = response;
         resolve(request_object);
 
       })
       .catch(function (error) {
 
-        var error_message = "Failed to create an input file for MFG PRO. " + request_object.internal.error;
-        request_object.error_message = middlewareErrors(request_object.environment, "MFG PRO FILE POST", "/ShopifyERPLink/ERP/FilePut", error_message);
-        winston.error(request_object.error_message);
-        reject(request_object);
+        if(!request_object.error){  
+
+          request_object.error = {
+            winston: middlewareErrors(request_object.environment, "MFG PRO FILE POST", "/ShopifyERPLink/ERP/FilePut", "Failed to connect to MFG Pro for input query or file POST."),
+            code: 503,
+            response: "MFG Pro service unavailable"
+          };
+
+          winston.error(request_object.error.winston);
+  
+        }
+  
+        resolve(request_object);
 
       });
   });
@@ -236,30 +271,38 @@ function pricingObjectTransformation(request_object) {
       var shopifyAccounts = "";
       var increaseKey = 0;
       var increaseValue = 0;
+      
 
       var raw = request_object.internal_response;
       var rawArray = raw.split('|');
 
       for (var i = 0; i < rawArray.length; i++) {
-
+        
         if (rawArray[i].includes("XXX")) {
 
           pricingObject[increaseKey] = {};
           increaseKey++;
           increaseValue = 0;
 
+        } else if (rawArray[i].includes("YYY")) {
+
+          
         } else {
 
           var objectReference = increaseKey - 1;
           var value = rawArray[i];
+          
+          if(pricingObject[objectReference]){
+
           pricingObject[objectReference][increaseValue] = value;
           increaseValue++;
-
+          
+          }
         }
       }
-
+      
       for (var products in pricingObject) {
-
+      
         var pricingRaw = Object.values(pricingObject[products][4]).join(' ');
         var pricing = pricingRaw.replace(/\s/g, '');
 
@@ -276,15 +319,26 @@ function pricingObjectTransformation(request_object) {
       shopifyAccounts = "F" + request_object.response.ShopifyFacilityNumber + ", S" + request_object.response.ShopifyShippingNumber + ", B" + request_object.response.ShopifyBillingNumber;
       shopifyTagString += shopifyAccounts;
       request_object.client_tags = shopifyTagString;
+
       resolve(request_object);
 
     } catch (error) {
 
       var shopifyAccounts = "F" + request_object.response.ShopifyFacilityNumber + ", S" + request_object.response.ShopifyShippingNumber + ", B" + request_object.response.ShopifyBillingNumber;
-      request_object.client_tags = shopifyAccounts;
+      request_object.client_tags = shopifyAccounts;   
 
-      request_object.error_message = middlewareErrors(request_object.environment, "MFG PRO PRICING GET", "ecommerce/spacelabs/pricing", "Unable to retrieve customer pricing from internal network.");
-      winston.error(request_object.error_message);
+      if(!request_object.error){  
+
+        request_object.error = {
+          winston: middlewareErrors(request_object.environment, "MFG PRO PRICING GET", "ecommerce/spacelabs/pricing", "Unable to retrieve customer pricing from internal network."),
+          code: 400,
+          response: "MFG Pro cannot process the request"
+        };
+
+        winston.error(request_object.error.winston);
+
+      }
+
       reject(request_object);
 
 
@@ -314,20 +368,25 @@ function shopifyPricingPUT(request_object) {
 
     request(request_object.shopify_options).then(function (response) {
 
-        if(response){
           request_object.shopify_response = response;
           resolve(request_object);
-        }else{
-          request_object.shopify_response = "response";
-          resolve(request_object);
-        }
-
+        
       })
       .catch(function (error) {
 
         var error_domain = "admin/customers/" + request_object.response.ShopifyCustomerNumber + ".json";
-        request_object.error_message = middlewareErrors(request_object.environment, "SHOPIFY PRICING PUT", error_domain, error.response.response);
-        winston.error(request_object.error_message);
+        
+        if(!request_object.error){  
+
+          request_object.error = {
+            winston: middlewareErrors(request_object.environment, "SHOPIFY PRICING PUT", error_domain, "Shopify PUT failed to update customer tags and update GPO pricing"),
+            code: 404,
+            response: "Failed to update Shopify customer"
+          };
+          winston.error(request_object.error.winston);
+  
+        }
+  
         reject(request_object);
 
       });
@@ -343,17 +402,8 @@ function customerRecordCreation(request_object) {
 
     try {
 
-      if (request_object.response.ShippingName == request_object.response.FacilityName || request_object.response.BillingName) {
-
-        FacilityName = request_object.response.FacilityName + " (Facility)";
-        BillingName = request_object.response.BillingName + " (Billing)";
-
-      } else {
-
-        FacilityName = request_object.response.FacilityName;
-        BillingName = request_object.response.BillingName;
-
-      }
+        var FacilityName = request_object.response.FacilityName + " (Facility)";
+        var BillingName = request_object.response.BillingName + " (Billing)";
 
       request_object.shopify_options = {
         method: 'POST',
@@ -371,7 +421,6 @@ function customerRecordCreation(request_object) {
                 "address1": request_object.response.ShippingAddress,
                 "city": request_object.response.ShippingAddressCity,
                 "province": request_object.response.ShippingAddressState,
-                "phone": request_object.response.ShippingContactNumber,
                 "zip": request_object.response.ShippingAddressZip,
                 "last_name": request_object.response.Lastname,
                 "first_name": request_object.response.Firstname,
@@ -382,7 +431,6 @@ function customerRecordCreation(request_object) {
                 "address1": request_object.response.FacilityAddress,
                 "city": request_object.response.FacilityAddressCity,
                 "province": request_object.response.FacilityAddressState,
-                "phone": request_object.response.FacilityContactNumber,
                 "last_name": request_object.response.Lastname,
                 "first_name": request_object.response.Firstname,
                 "country": "US"
@@ -392,7 +440,6 @@ function customerRecordCreation(request_object) {
                 "address1": request_object.response.BillingAddress,
                 "city": request_object.response.BillingAddressCity,
                 "province": request_object.response.BillingAddressState,
-                "phone": request_object.response.BillingContactNumber,
                 "zip": request_object.response.BillingAddressZip,
                 "last_name": request_object.response.Lastname,
                 "first_name": request_object.response.Firstname,
@@ -407,11 +454,21 @@ function customerRecordCreation(request_object) {
       };
 
       resolve(request_object);
+
     } catch (error) {
 
-      var errorMessage = middlewareErrors(request_object.environment, "SHOPIFY POST OBJECT", request_object.domain, "Unable to create Shopify customer POST object.");
-      winston.error(errorMessage);
-      reject();
+      if(!request_object.error){  
+
+        request_object.error = {
+          winston: middlewareErrors(request_object.environment, "SHOPIFY POST OBJECT", request_object.domain, "Unable to create Shopify customer POST object."),
+          code: 400,
+          response: "Failed to update Shopify customer"
+        };
+        winston.error(request_object.error.winston);
+
+      }
+
+      reject(request_object);
     }
   });
   return promise;
@@ -436,11 +493,31 @@ function shopifyCustomerPOST(request_object) {
       })
       .catch(function (error) {
 
-        var message = JSON.stringify(error.response.body);
-        var errorMessage = middlewareErrors(request_object.environment, "SHOPIFY POST ROUTE", request_object.domain, message);
-        winston.error(errorMessage);
+        var shopify_response = "<h3 class='error-title'>Oops! Please fix the errors and resubmit your form</h3><p>Errors found on General Information tab:</p>" 
 
-        reject({error: error.response.body});
+        if(error.response.body){
+          
+          for(var errors in error.response.body.errors){
+          
+            shopify_response += "<p>" + errors + " " + error.response.body.errors[errors] + "<p>";
+
+          }
+
+        }
+
+        if(!request_object.error){  
+
+          request_object.error = {
+            winston: middlewareErrors(request_object.environment, "SHOPIFY POST ROUTE", request_object.domain, "Unable to POST to Shopify customer API."),
+            code: 400,
+            response: shopify_response
+          };
+          winston.warn(request_object.error.winston);
+  
+        }
+
+        reject(request_object);
+        
 
       });
   });
@@ -459,17 +536,17 @@ function shopifyAddressPUT(request_object) {
   var promise = new Promise(function (resolve, reject) {
 
     request(request_object.shopify_address_options).then(function (response) {
+
         resolve(request_object);
+
       })
       .catch(function (error) {
 
-        var message = JSON.stringify(error.response.body);
-        var errorMessage = middlewareErrors(request_object.environment, "SHOPIFY ADDRESS PUT ROUTE", request_object.domain, message);
-        winston.error(errorMessage);
+        var error_message = middlewareErrors(request_object.environment, "SHOPIFY ADDRESS PUT ROUTE", request_object.domain, "Unable to POST to Shopify customer address API.");
 
-        reject({
-          error: error.response.body
-        });
+        winston.error(error_message);
+  
+        resolve(request_object);
 
       });
   });
@@ -512,9 +589,12 @@ function customerFileCreation(request_object) {
       resolve(request_object);
     } catch (error) {
 
-      var errorMessage = middlewareErrors(request_object.environment, "MFG PRO CUSTOMER POST OBJECT", "/ecommerce/spacelabs/register", "Unable to create MFG Pro customer intake object.");
-      winston.error(errorMessage);
-      reject(error);
+      var error_message = middlewareErrors(request_object.environment, "MFG PRO CUSTOMER POST OBJECT", "/ecommerce/spacelabs/register", "Unable to create MFG Pro customer intake object.");
+
+      winston.error(error_message);
+  
+      resolve(request_object);
+
     }
 
   });
@@ -528,6 +608,7 @@ function orderObjectCreation(request_object) {
   var promise = new Promise(function (resolve, reject) {
 
     try {
+
       var completed_order = "";
       var shipping_method = "";
       var line_items = request_object.response.line_items;
@@ -545,16 +626,56 @@ function orderObjectCreation(request_object) {
       var facility_number = tagsArray.pop().slice(1, 15);
       var billing_number = tagsArray.pop().slice(1, 15);
 
-      var order_paid = "order paid";
+      var order_paid = "";
       var custom_shipper = "";
       var attention_note = "";
       var shipping_carrier = "";
       var shipping_carrier_number = "";
       var purchase_order = "";
       var shopify_order = "";
+      var shipping_cost = "";
+      var handling_fee = "";
+
+      
+
+      // ---------------- CALCULATING SHIPPING COSTS AND HANDLING FEES ----------------
+
+      var shipping_total = parseFloat(request_object.response.shipping_lines[0].price);
+      
+      if(shipping_total < 5.95){
+
+        shipping_cost = 0.00;
+        handling_fee = shipping_total;
+
+      }else{
+
+        shipping_cost = -5.95 + shipping_total;
+        handling_fee = 5.95;
+
+      }
+
+      var shipping_min = Math.max(0, shipping_cost);
+
+      var company_name = request_object.response.shipping_address.company;
+
+      if(company_name.includes("(Facility)")){
+
+        shipping_number = facility_number;
+
+      }else if(company_name.includes("(Billing)")){
+        
+        shipping_number = billing_number;
+
+      }else{
+
+      }
+
+      // ---------------- CREATING METADATA FROM NOTES ATTRIBUTES AND SEPERATING THEM INTO FIELDS ----------------
 
       for(var notes in request_object.response.note_attributes){
+
         switch (request_object.response.note_attributes[notes].name) {
+
           case "purchase_order":
 
             if(request_object.response.note_attributes[notes].value == "none"){
@@ -564,6 +685,7 @@ function orderObjectCreation(request_object) {
             }
 
             break;
+
           case "shipping_name":
 
             if(request_object.response.note_attributes[notes].value == "none"){
@@ -573,6 +695,7 @@ function orderObjectCreation(request_object) {
             }
 
             break;
+
           case "shipping_number":
             
             if(request_object.response.note_attributes[notes].value == "none"){
@@ -582,6 +705,7 @@ function orderObjectCreation(request_object) {
             }
 
             break;
+
           case "attention":
 
             if(request_object.response.note_attributes[notes].value == "none"){
@@ -591,32 +715,59 @@ function orderObjectCreation(request_object) {
             }
 
             break;
+
           default:
         }
       }
 
+      // ---------------- ADDING PENDING OR PAID SWITCH ----------------
+
       if(request_object.response.financial_status == "pending"){
+
         order_paid = "collect payment";
+
+      }else{
+
+        order_paid = "order paid";
+
       }
 
+      // ---------------- CONVERTING SHOPIFY SHIPPING CODES TO MFG PRO SHIPPING CODE ----------------
+
       switch (request_object.response.shipping_lines[0].title) {
+
         case "FedEx 2 Day":
+
           shipping_method = "FEDEX11";
+
           break;
+
         case "FedEx Express Saver":
+
           shipping_method = "FEDEX3";
+
           break;
+
         case "FedEx Ground":
+
           shipping_method = "FEDEX99";
+
           break;
+
         case "FedEx Priority Overnight":
+
           shipping_method = "FEDEX1";
+
           break;
+
         default:
+
           shipping_method = "FEDEX99";
       }
 
       customer_shipper = shipping_carrier + shipping_carrier_number;
+
+      // ---------------- PUTTING REQUEST STRING TOGETHER FOR MFG PRO POST ----------------
       
       var order_header = {
         "Row ID": "H",
@@ -627,7 +778,7 @@ function orderObjectCreation(request_object) {
         "MFG Pro Ship-to": shipping_number,
         "Total Price": request_object.response.total_price,
         "Total Tax": request_object.response.total_tax,
-        "Total Shipping Cost": request_object.response.shipping_lines[0].price,
+        "Total Shipping Cost": shipping_min,
         "Ship Via": shipping_method,
         "Ship Date": ship_date,
         "Total Weight": request_object.response.total_weight,
@@ -636,8 +787,11 @@ function orderObjectCreation(request_object) {
         "Customer Paid": order_paid,
         "Attention to:": attention_note,
         "Shopify Order Number": request_object.response.name,
-        "Shipping Carrier Details": customer_shipper
+        "Shipping Carrier Details": customer_shipper,
+        "Handling Fee": handling_fee,
       };
+
+      // ---------------- FORMATTING DATA TO BE '|' DELIMETER ----------------
 
       for (var header in order_header) {
 
@@ -646,22 +800,11 @@ function orderObjectCreation(request_object) {
 
       completed_order += "%0A";
 
+      // ---------------- FORMATTING LINE ITEM DATA TO BE '|' DELIMETER ----------------
+
       for (var items in line_items) {
 
         var line_number = parseInt(items) + 1;
-        var pack_sku = line_items[items].sku;
-        var pack_size = pack_sku.split('-').pop();
-        var modified_size = "";
-
-        if (pack_size == '00') {
-
-          modified_size = '01';
-
-        } else {
-
-          modified_size = pack_size;
-
-        }
 
         var line_item = {
           "Row ID": "I",
@@ -672,7 +815,7 @@ function orderObjectCreation(request_object) {
           "UOM": "Each",
           "Unit Price": line_items[items].price,
           "Item Weight (Grams)": line_items[items].grams,
-          "Pack Size": modified_size,
+          "Pack Size": "",
         };
 
         for (var line in line_item) {
@@ -684,14 +827,16 @@ function orderObjectCreation(request_object) {
         completed_order += "%0A";
 
       }
+      // ---------------- COMPLETING QUERY STRING FOR MFG PRO ----------------
 
       request_object.internal_options.uri += order_date + "_" + request_object.response.name;
       request_object.internal_options.uri += "&FileData=" + completed_order.replace(/\s/g, "%20");
+      
       resolve(request_object);
     } catch (error) {
 
-      var errorMessage = middlewareErrors(request_object.environment, "MFG PRO ORDER POST OBJECT", "/webhook/spacelabs/order", "Unable to create the order intake post object for MFG PRO. Cross reference " + request_object.response.name + " in Shopify and verify in MFG PRO.");
-      winston.error(errorMessage);
+      var error_message = middlewareErrors(request_object.environment, "MFG PRO ORDER POST OBJECT", "/webhook/spacelabs/order", "Unable to create the order intake post object for MFG PRO. Cross reference " + request_object.response.name + " in Shopify and verify in MFG PRO.");
+      winston.error(error_message);
 
       reject();
 
@@ -714,12 +859,10 @@ function addDays(date, days) {
 // ---------------- MIDDLEWARE INTEGRATION ROUTE CUSTOMER INTAKE - NORMALIZE PHONE NUMBERS ----------------
 
 function normalizePhoneNumbers(phone) {
-  //normalize string and remove all unnecessary characters
+
   phone = phone.replace(/[^\d]/g, "");
 
-  //check if number length equals to 10
   if (phone.length == 10) {
-      //reformat and return phone number
       return phone.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3");
   }
 
@@ -742,7 +885,9 @@ function webhookHMACValidator(request_object) {
 
     } else {
 
-      reject();
+      var error_message = middlewareErrors("*ALL*", "SHOPIFY WEBHOOK VALIDATION", "/webhook/spacelabs/order", "Unable to validate Nodejs Environment.");
+      winston.error(error_message);
+      reject(request_object);
 
     }
 
@@ -754,9 +899,9 @@ function webhookHMACValidator(request_object) {
 
     } else {
 
-      var errorMessage = middlewareErrors("TEST", "SHOPIFY VALIDATION", "/webhook/spacelabs/order", "Webhook HMAC validation failed to connect to Shopify Server.");
-      winston.error(errorMessage);
-      res.sendStatus(403);
+      var error_message = middlewareErrors("TEST", "SHOPIFY WEBHOOK VALIDATION", "/webhook/spacelabs/order", "Webhook HMAC validation failed to connect to Shopify Server.");
+      winston.error(error_message);
+      reject(request_object);
 
     }
   });
@@ -776,14 +921,9 @@ var formatCustomerIntakeFile = function (customer_object) {
     } else {
       tax_exempt = true;
     }
-    var company_billing = customer_object.intake_object[8];
-    var company_facility = customer_object.intake_object[19];
+    var company_billing = customer_object.intake_object[8] + " (Billing)";
+    var company_facility = customer_object.intake_object[19] + " (Facility)";
     var company_shipping = customer_object.intake_object[30];
-
-    if (customer_object.intake_object[30] == customer_object.intake_object[8] || customer_object.intake_object[30]) {
-      company_billing = customer_object.intake_object[8] + " (Billing)";
-      company_facility = customer_object.intake_object[19] + " (Facility)";
-    }
 
     var billing_phone_number = customer_object.intake_object[12].trim();
     var shipping_phone_number = customer_object.intake_object[34].trim();
@@ -880,7 +1020,6 @@ function shopifyCustomerPUT(customer_object) {
     request(customer_object.options).then(function (body) {
 
         customer_object.shopify_response = body;
-        console.log(customer_object.shopify_response);
         resolve(customer_object);
 
       })

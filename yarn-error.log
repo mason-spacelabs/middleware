@@ -1,5 +1,5 @@
 Arguments: 
-  C:\Program Files\nodejs\node.exe C:\Program Files (x86)\Yarn\bin\yarn.js RUN PROD
+  C:\Program Files\nodejs\node.exe C:\Program Files (x86)\Yarn\bin\yarn.js run server\
 
 PATH: 
   C:\ProgramData\Oracle\Java\javapath;C:\Program Files (x86)\Common Files\Intel\Shared Libraries\redist\ia32\mpirt;C:\Program Files (x86)\Common Files\Intel\Shared Libraries\redist\ia32\compiler;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\SWTOOLS\ReadyApps;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files (x86)\Attachmate\Reflection\;C:\Program Files (x86)\Shoreline Communications\ShoreWare Client\;C:\Program Files (x86)\Shoreline Communications\ShoreWare Client\win64;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files (x86)\Skype\Phone\;C:\Program Files\nodejs\;C:\Program Files\Git\cmd;C:\Program Files (x86)\Yarn\bin\;;C:\Program Files\Microsoft VS Code\bin;C:\Users\halstemx\AppData\Roaming\npm;C:\Program Files\Theme Kit\;C:\Users\halstemx\AppData\Local\Yarn\bin
@@ -22,7 +22,7 @@ npm manifest:
       "server": "ngrok http 3000",
       "prod": "npm run clean && npm run build && cross-env NODE_ENV=production npm run start",
       "dev": "cross-env NODE_ENV=development npm run start",
-      "start": "node ./bin/www",
+      "start": "node ./service",
       "build": "cross-env NODE_ENV=production webpack --config ./config/webpack.config.js --progress --profile --colors",
       "clean": "rimraf -rf ./assets && mkdir assets",
       "pretty": "prettier --single-quote --trailing-comma es5 --write {client,bin,config,server}{/*,/**/*}.js",
@@ -6657,7 +6657,7 @@ Lockfile:
       window-size "0.1.0"
 
 Trace: 
-  Error: Command "RUN" not found.
+  Error: Command "server\\" not found. Did you mean "server"?
       at new MessageError (C:\Program Files (x86)\Yarn\lib\cli.js:186:110)
       at C:\Program Files (x86)\Yarn\lib\cli.js:87307:17
       at Generator.next (<anonymous>)

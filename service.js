@@ -1,3 +1,6 @@
+require('dotenv').config();
+const chalk = require('chalk');
+const http = require('http');
 require('isomorphic-fetch');
 require('dotenv').config();
 
@@ -23,7 +26,7 @@ const chokidar = require('chokidar');
 const webpack = require('webpack');
 const webpackMiddleware = require('webpack-dev-middleware');
 const webpackHotMiddleware = require('webpack-hot-middleware');
-const config = require('../config/webpack.config.js');
+const config = require('./config/webpack.config.js');
 
 const ShopifyAPIClient = require('shopify-api-node');
 const ShopifyExpress = require('@shopify/shopify-express');
@@ -86,6 +89,7 @@ app.use(
 
 app.enable('trust proxy');
 
+
 var apiLimiter = new RateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -120,7 +124,7 @@ if (isDevelopment) {
 }
 
 // Install
-app.get('/install', (req, res) => res.render('install'));
+app.get('/node/fs/service/install', (req, res) => res.render('install'));
 
 // Create shopify middlewares and router
 const shopify = ShopifyExpress(shopifyConfig);
@@ -168,7 +172,7 @@ var corsOptions = {
 
 // ---------------- DYNAMIC SHOPIFY RESET CUSTOMER TAGS ----------------
 
-app.post('/ecommerce/spacelabs/customer', cors(corsOptions), helpers.middlewareHMACValidator, function (req, res) {
+app.post('/node/fs/service/spacelabs/customer', cors(corsOptions), helpers.middlewareHMACValidator, function (req, res) {
 
   var request_object = {
     domain: req.headers['x-forwarded-host'],
@@ -183,15 +187,15 @@ app.post('/ecommerce/spacelabs/customer', cors(corsOptions), helpers.middlewareH
     res.status(200).send();
 
   }, function (error) {
-
-    res.status(404).send(error);
+    
+    res.status(error.error.code).send(error.error.response);
 
   });
 });
 
 // ---------------- DYNAMIC SHOPIFY APPLICATION PROXY PRICING ----------------
 
-app.post('/ecommerce/spacelabs/pricing', cors(corsOptions), helpers.middlewareHMACValidator, function (req, res) {
+app.post('/node/fs/service/spacelabs/pricing', cors(corsOptions), helpers.middlewareHMACValidator, function (req, res) {
 
   var request_object = {
     domain: req.headers['x-forwarded-host'],
@@ -212,35 +216,29 @@ app.post('/ecommerce/spacelabs/pricing', cors(corsOptions), helpers.middlewareHM
     .then(helpers.pricingObjectTransformation)
     .then(helpers.shopifyPricingPUT)
     .then(function (response) {
-
+      
       res.status(200).send({ response: 'success' });
 
     }, function (error) {
 
       helpers.shopifyPricingPUT(error).then(function (response) {
 
-        var error_message = helpers.middlewareErrors(response.environment, "POST", "SHOPIFY PRICING PUT", "Failed to retrieve customer pricing from MFG Pro. Successfully updated Shopify customer with updated MFG Pro Bill-to, Ship-to and Sold-to codes.");
-        winston.error(error_message);
+        res.status(error.error.code).send(error.error.response);
 
       }, function (error) {
 
-        var error_message = helpers.middlewareErrors(response.environment, "POST", "SHOPIFY PRICING PUT", "Failed to retrieve customer pricing from MFG Pro. Failed to update Shopify customer with updated MFG Pro Bill-to, Ship-to and Sold-to codes.");
-        winston.error(error_message);
-
-        res.status(403).send({ error: error.error_message });
+        res.status(error.error.code).send(error.error.response);
 
       });
 
-      res.status(403).send({
-        error: error.error_message
-      });
+      res.status(error.error.code).send(error.error.response);
 
     });
 });
 
 // ---------------- DYNAMIC SHOPIFY APPLICATION PROXY REGISTRATION ----------------
 
-app.post('/ecommerce/spacelabs/register', cors(corsOptions), helpers.middlewareHMACValidator, function (req, res) {
+app.post('/node/fs/service/spacelabs/register', cors(corsOptions), helpers.middlewareHMACValidator, function (req, res) {
 
   var request_object = {
     domain: req.headers['x-forwarded-host'],
@@ -269,8 +267,8 @@ app.post('/ecommerce/spacelabs/register', cors(corsOptions), helpers.middlewareH
       console.log("Successful Registrating Cycle!");
 
     }, function (error) {
-
-      res.status(404).send(error);
+      
+      res.status(error.error.code).send({ response: error.error.response });
 
     });
 });
@@ -278,7 +276,7 @@ app.post('/ecommerce/spacelabs/register', cors(corsOptions), helpers.middlewareH
 
 // ---------------- DYNAMIC SHOPIFY WEBHOOK FTP ORDER CREATE ----------------
 
-app.post('/webhook/spacelabs/order', cors(corsOptions), helpers.webhookParsingMiddleware, function(req, res, next) {
+app.post('/node/fs/service/spacelabs/webhook/order', cors(corsOptions), helpers.webhookParsingMiddleware, function(req, res, next) {
 
   var request_object = {
     domain: req.headers['x-shopify-shop-domain'],
@@ -296,7 +294,7 @@ app.post('/webhook/spacelabs/order', cors(corsOptions), helpers.webhookParsingMi
       uri: process.env.NODE_ENV === "production" ? process.env.MFG_PRO_PROD_NONCE_GENERATOR : process.env.MFG_PRO_TEST_NONCE_GENERATOR,
     }
   };
-
+  
   helpers.webhookHMACValidator(request_object)
   .then(helpers.internalAuthentication)
   .then(helpers.orderObjectCreation)
@@ -304,12 +302,12 @@ app.post('/webhook/spacelabs/order', cors(corsOptions), helpers.webhookParsingMi
   .then(function(response) {
 
  res.sendStatus(200);
-
+ 
     console.log("Successfully sent order!");
   
   },function(error) {
 
-  res.sendStatus(200);
+  res.sendStatus(400);
 
   console.log("Failed to send order");
 
@@ -352,9 +350,13 @@ function internalCustomerVerified() {
       }
       helpers.PostCustomerUpdates(request_object)
         .then(function (response) {
+
           console.log("Successfully checked registration files or sent invite!");
+
         }, function (error) {
+
           console.log("Error sending invite");
+
         });
 
     }, function (error) {
@@ -364,14 +366,14 @@ function internalCustomerVerified() {
 
 // ---------------- MFG PRO SET INTERVAL CUSTOMER VERIFIED AND INVITE ----------------
 
-setInterval(function(){ internalCustomerVerified(); }, 1000 * 60 * 2);
+setInterval(function(){ internalCustomerVerified(); }, 1000 * 60 * 10);
 
 // -------------------------------- END --------------------------------
 // -------------------------------- END --------------------------------
 
 // Error Handlers
 app.use(function (req, res, next) {
-  console.log(req);
+
   const error = new Error('Spacelabs Healthcare Not Found');
   error.status = 404;
   next(error);
@@ -387,4 +389,14 @@ app.use(function (error, request, response, next) {
   response.render('error');
 });
 
-module.exports = app;
+const port = process.env.PORT || '3000';
+app.set('port', port);
+
+const server = http.createServer(app);
+
+server.listen(port, err => {
+  if (err) {
+    return console.log('😫', chalk.red(err));
+  }
+  console.log(`🚀 Now listening on port ${chalk.green(port)}`);
+});
