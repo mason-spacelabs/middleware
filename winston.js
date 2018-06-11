@@ -6,7 +6,7 @@ var options = {
     file: {
       name: 'API',
       level: 'info',
-      filename: './tmp/logs/app.log',
+      filename: './app.log',
       handleExceptions: true,
       json: false,
       maxsize: 5242880, // 5MB
@@ -16,7 +16,7 @@ var options = {
     error: {
       name: 'Errors',
       level: 'error',
-      filename: './tmp/logs/error.log',
+      filename: './error.log',
       handleExceptions: true,
       json: false,
       maxsize: 5242880, // 5MB
@@ -26,7 +26,7 @@ var options = {
     warn: {
       name: 'Warning',
       level: 'warn',
-      filename: './tmp/logs/app.log',
+      filename: './app.log',
       handleExceptions: true,
       json: false,
       maxsize: 5242880, // 5MB

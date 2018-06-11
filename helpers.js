@@ -653,7 +653,8 @@ function orderObjectCreation(request_object) {
         handling_fee = 5.95;
 
       }
-
+      console.log(shipping_cost);
+      console.log(handling_fee);
       var shipping_min = Math.max(0, shipping_cost);
 
       var company_name = request_object.response.shipping_address.company;
