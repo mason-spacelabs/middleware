@@ -316,7 +316,7 @@ function pricingObjectTransformation(request_object) {
 
       }
 
-      shopifyAccounts = "F" + request_object.response.ShopifyFacilityNumber + ", S" + request_object.response.ShopifyShippingNumber + ", B" + request_object.response.ShopifyBillingNumber;
+      shopifyAccounts = request_object.response.ShopifyFacilityNumber + ", " + request_object.response.ShopifyShippingNumber + ", " + request_object.response.ShopifyBillingNumber;
       shopifyTagString += shopifyAccounts;
       request_object.client_tags = shopifyTagString;
 
@@ -324,7 +324,7 @@ function pricingObjectTransformation(request_object) {
 
     } catch (error) {
 
-      var shopifyAccounts = "F" + request_object.response.ShopifyFacilityNumber + ", S" + request_object.response.ShopifyShippingNumber + ", B" + request_object.response.ShopifyBillingNumber;
+      var shopifyAccounts = request_object.response.ShopifyFacilityNumber + ", " + request_object.response.ShopifyShippingNumber + ", " + request_object.response.ShopifyBillingNumber;
       request_object.client_tags = shopifyAccounts;   
 
       if(!request_object.error){  
@@ -574,6 +574,7 @@ function customerFileCreation(request_object) {
         "Shopify Billing ID": request_object.shopify_response.Billing_Address,
         "Shopify Facility ID": request_object.shopify_response.Facility_Address,
         "Shopify Shipping ID": request_object.shopify_response.Shipping_Address
+        
       };
 
       for (var header in customer_headers) {
@@ -615,6 +616,15 @@ function orderObjectCreation(request_object) {
       var customer_tags = request_object.response.customer.tags;
       var tagsArray = customer_tags.split(", ");
 
+      var billing_tag = tagsArray.pop();
+      var billing_number = billing_tag.split('|');
+
+      var shipping_tag = tagsArray.pop();
+      var shipping_number = shipping_tag.split('|');
+
+      var facility_tag = tagsArray.pop();   
+      var facility_number = facility_tag.split('|');   
+
       var date = new Date(request_object.response.created_at);
       var short_date = (date.getMonth() + 1 + '/' + date.getDate() + '/' + date.getFullYear());
       var order_date = (date.getMonth() + 1 + '_' + date.getDate());
@@ -622,17 +632,11 @@ function orderObjectCreation(request_object) {
       var date_added = addDays(request_object.response.created_at, 1);
       var ship_date = (date_added.getMonth() + 1 + '/' + date_added.getDate() + '/' + date_added.getFullYear());
 
-      var shipping_number = tagsArray.pop().slice(1, 15);
-      var facility_number = tagsArray.pop().slice(1, 15);
-      var billing_number = tagsArray.pop().slice(1, 15);
-
       var order_paid = "";
-      var custom_shipper = "";
       var attention_note = "";
       var shipping_carrier = "";
       var shipping_carrier_number = "";
       var purchase_order = "";
-      var shopify_order = "";
       var shipping_cost = "";
       var handling_fee = "";
 
@@ -653,19 +657,23 @@ function orderObjectCreation(request_object) {
         handling_fee = 5.95;
 
       }
-      console.log(shipping_cost);
-      console.log(handling_fee);
+
       var shipping_min = Math.max(0, shipping_cost);
 
-      var company_name = request_object.response.shipping_address.company;
+      var shipping_identification = request_object.response.customer.default_address.id;
+      var shipping_code = "";
 
-      if(company_name.includes("(Facility)")){
+      if(shipping_identification == billing_number[0]){
 
-        shipping_number = facility_number;
+        shipping_code = billing_number[1];
 
-      }else if(company_name.includes("(Billing)")){
+      }else if(shipping_identification == facility_number[0]){
         
-        shipping_number = billing_number;
+        shipping_code = facility_number[1];
+
+      }else if(shipping_identification == shipping_number[0]){
+
+        shipping_code = shipping_number[1];
 
       }else{
 
@@ -772,11 +780,11 @@ function orderObjectCreation(request_object) {
       
       var order_header = {
         "Row ID": "H",
-        "MFG Pro Sold-to": facility_number,
-        "MFG Pro Bill-to": billing_number,
+        "MFG Pro Sold-to": facility_number[1],
+        "MFG Pro Bill-to": billing_number[1],
         "Customer PO Number": purchase_order,
         "PO Date": short_date,
-        "MFG Pro Ship-to": shipping_number,
+        "MFG Pro Ship-to": shipping_code,
         "Total Price": request_object.response.total_price,
         "Total Tax": request_object.response.total_tax,
         "Total Shipping Cost": shipping_min,
@@ -922,13 +930,15 @@ var formatCustomerIntakeFile = function (customer_object) {
     } else {
       tax_exempt = true;
     }
+
     var company_billing = customer_object.intake_object[8] + " (Billing)";
     var company_facility = customer_object.intake_object[19] + " (Facility)";
     var company_shipping = customer_object.intake_object[30];
 
     var billing_phone_number = customer_object.intake_object[12].trim();
-    var shipping_phone_number = customer_object.intake_object[34].trim();
     var facility_phone_number = customer_object.intake_object[23].trim();
+    var shipping_phone_number = customer_object.intake_object[34].trim();
+    
 
     if(billing_phone_number){
       billing_phone_number = normalizePhoneNumbers(billing_phone_number);
@@ -966,7 +976,7 @@ var formatCustomerIntakeFile = function (customer_object) {
                 "country": 'US'
               },
               {
-                "id": customer_object.intake_object[28], // Facility Shopify Number is switched on intake
+                "id": customer_object.intake_object[17],
                 "company": company_facility,
                 "address1": customer_object.intake_object[20],
                 "city": customer_object.intake_object[21],
@@ -978,7 +988,7 @@ var formatCustomerIntakeFile = function (customer_object) {
                 "country": 'US'
               },
               {
-                "id": customer_object.intake_object[17], // Shipping Shopify Number is switched on intake
+                "id": customer_object.intake_object[28],
                 "company": company_shipping,
                 "address1": customer_object.intake_object[31],
                 "city": customer_object.intake_object[32],
@@ -992,7 +1002,7 @@ var formatCustomerIntakeFile = function (customer_object) {
             ],
             "metafields": [{
              "key": "details",
-             "value": "Account #:" + "F" + customer_object.intake_object[18] + ", Company: " + customer_object.intake_object[30] + ", MFG Pro Bill #:" + "B" + customer_object.intake_object[7] + ", MFG Pro Ship #:" + "S" + customer_object.intake_object[29] + ",",
+             "value": "Account #:" + customer_object.intake_object[17] + "|" + customer_object.intake_object[18] + "|FACILITY" + ", Company: " + customer_object.intake_object[30] + ", MFG Pro Bill #:" + customer_object.intake_object[6] + "|" + customer_object.intake_object[7] + "|BILLING" + ", MFG Pro Ship #:" + customer_object.intake_object[28] + "|" + customer_object.intake_object[29] + "|SHIPPING" + ",",
              "value_type": "string",
              "namespace": "account_data"
             }, ],

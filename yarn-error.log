@@ -1,5 +1,5 @@
 Arguments: 
-  C:\Program Files\nodejs\node.exe C:\Program Files (x86)\Yarn\bin\yarn.js run server
+  C:\Program Files\nodejs\node.exe C:\Program Files (x86)\Yarn\bin\yarn.js run dev
 
 PATH: 
   C:\ProgramData\Oracle\Java\javapath;C:\Program Files (x86)\Common Files\Intel\Shared Libraries\redist\ia32\mpirt;C:\Program Files (x86)\Common Files\Intel\Shared Libraries\redist\ia32\compiler;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\SWTOOLS\ReadyApps;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files (x86)\Attachmate\Reflection\;C:\Program Files (x86)\Shoreline Communications\ShoreWare Client\;C:\Program Files (x86)\Shoreline Communications\ShoreWare Client\win64;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files (x86)\Skype\Phone\;C:\Program Files\nodejs\;C:\Program Files\Git\cmd;C:\Program Files (x86)\Yarn\bin\;;C:\Program Files\Microsoft VS Code\bin;C:\Users\halstemx\AppData\Roaming\npm;C:\Program Files\Theme Kit\;C:\Users\halstemx\AppData\Local\Yarn\bin
@@ -49,7 +49,7 @@ npm manifest:
       "chokidar": "^2.0.3",
       "cookie-parser": "^1.4.3",
       "cookie-session": "^2.0.0-beta.3",
-      "cross-env": "^5.1.3",
+      "cross-env": "^5.2.0",
       "crypto": "^1.0.1",
       "crypto-js": "^3.1.9-1",
       "debug": "~2.6.3",
@@ -81,7 +81,7 @@ npm manifest:
       "url": "^0.11.0",
       "webpack-hot-middleware": "^2.18.0",
       "webpack-middleware": "^1.5.1",
-      "winston": "^2.4.1"
+      "winston": "^2.4.3"
     },
     "devDependencies": {
       "autoprefixer": "^7.1.1",
@@ -6660,8 +6660,8 @@ Trace:
   Error: Command failed.
   Exit code: 3221225786
   Command: C:\Windows\system32\cmd.exe
-  Arguments: /d /s /c ngrok http 3000
-  Directory: C:\Users\halstemx\Desktop\service-prod
+  Arguments: /d /s /c cross-env NODE_ENV=development npm run start
+  Directory: C:\Users\halstemx\Desktop\Spacelabs\spacelabs-middleware
   Output:
   
       at ProcessTermError.MessageError (C:\Program Files (x86)\Yarn\lib\cli.js:186:110)

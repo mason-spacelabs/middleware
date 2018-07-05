@@ -177,7 +177,7 @@ app.post('/node/fs/service/spacelabs/customer', cors(corsOptions), helpers.middl
   var request_object = {
     domain: req.headers['x-forwarded-host'],
     response: req.body,
-    client_tags: "F" + req.body.ShopifyFacilityNumber + ", S" + req.body.ShopifyShippingNumber + ", B" + req.body.ShopifyBillingNumber
+    client_tags: req.body.ShopifyFacilityNumber + ", " + req.body.ShopifyShippingNumber + ", " + req.body.ShopifyBillingNumber
   };
 
   helpers.environmentValidation(request_object)
